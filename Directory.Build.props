@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!-- Exclude Cursor history and other projects from build -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/.idea/**;**/bin/**;**/obj/**</DefaultItemExcludes>
+    <EnableDefaultItems>true</EnableDefaultItems>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+</Project>
+
