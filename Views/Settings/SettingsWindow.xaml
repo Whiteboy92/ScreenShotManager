@@ -11,7 +11,8 @@
         WindowStyle="None"
         AllowsTransparency="False"
         BorderBrush="{StaticResource BorderBrush}"
-        BorderThickness="1">
+        BorderThickness="1"
+        Icon="/Icon/camera_2925432.ico">
     
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="32" 

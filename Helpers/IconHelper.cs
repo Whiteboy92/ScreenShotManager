@@ -1,9 +1,12 @@
+using System;
 using System.Drawing;
+using System.IO;
+using System.Reflection;
 
 namespace ScreenShotManager.Helpers;
 
 /// <summary>
-/// Helper class for creating icons
+/// Helper class for loading application icons
 /// </summary>
 public static class IconHelper
 {
@@ -11,6 +14,27 @@ public static class IconHelper
     /// Creates the system tray icon
     /// </summary>
     public static Icon CreateTrayIcon()
+    {
+        try
+        {
+            // Try to load icon from file
+            var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Icon", "camera_2925432.ico");
+            
+            if (File.Exists(iconPath))
+            {
+                return new Icon(iconPath);
+            }
+            
+            // Fallback: create simple icon programmatically
+            return CreateFallbackIcon();
+        }
+        catch
+        {
+            return CreateFallbackIcon();
+        }
+    }
+    
+    private static Icon CreateFallbackIcon()
     {
         var bitmap = new Bitmap(32, 32);
         using (var g = Graphics.FromImage(bitmap))
