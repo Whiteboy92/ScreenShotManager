@@ -14,6 +14,6 @@ public interface ISystemTrayService : IDisposable
     event EventHandler? TakeScreenshotRequested;
     
     void Initialize();
-    void ShowNotification(string title, string message);
+    void ShowNotification(string title, string message, NotificationSeverity severity = NotificationSeverity.Info);
 }
 

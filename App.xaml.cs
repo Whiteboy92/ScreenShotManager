@@ -293,9 +293,37 @@ public partial class App
         CleanupServices();
     }
 
-    private void ShowError(string message)
+    private void ShowError(string message) => Notify("Error", message, NotificationSeverity.Error);
+
+    /// <summary>
+    /// Unified user-facing notification. Pops a tray balloon (the app has no main window),
+    /// marshalling onto the UI thread since the tray icon is WinForms-affine. Falls back to a
+    /// modal MessageBox only before the tray exists (e.g. a failure during service init).
+    /// </summary>
+    private void Notify(string title, string message, NotificationSeverity severity = NotificationSeverity.Info)
     {
-        MessageBox.Show(message, "Error", 
-            MessageBoxButton.OK, MessageBoxImage.Error);
+        void Show()
+        {
+            if (systemTrayService != null)
+            {
+                systemTrayService.ShowNotification(title, message, severity);
+            }
+            else
+            {
+                var image = severity == NotificationSeverity.Error
+                    ? MessageBoxImage.Error
+                    : MessageBoxImage.Information;
+                MessageBox.Show(message, title, MessageBoxButton.OK, image);
+            }
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            Show();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(new Action(Show));
+        }
     }
 }

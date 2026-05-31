@@ -5,6 +5,7 @@ using System.Threading;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using ScreenShotManager.Shared.Helpers;
+using ScreenShotManager.Shared.Services;
 using ScreenShotManager.VideoDownscaler.Models;
 using ScreenShotManager.VideoDownscaler.Services;
 using ScreenShotManager.VideoDownscaler.Services.Interfaces;
@@ -83,7 +84,7 @@ public partial class App
         return false;
     }
 
-    private static void ForwardToPrimary(IReadOnlyList<string> files)
+    private void ForwardToPrimary(IReadOnlyList<string> files)
     {
         try
         {
@@ -91,10 +92,23 @@ public partial class App
             // Block briefly; this is a transient launcher process with no UI.
             var sent = client.TrySendAsync(files).GetAwaiter().GetResult();
             CaptureLog.Write($"[downscale] forwarded {files.Count} path(s) to primary: sent={sent}");
+
+            if (!sent)
+            {
+                // No tray in this transient process → Notify falls back to a modal MessageBox.
+                Notify(
+                    "Downscale failed",
+                    "Could not reach the running Screen Shot Manager to queue the video.",
+                    NotificationSeverity.Error);
+            }
         }
         catch (Exception ex)
         {
             CaptureLog.Write($"[downscale] forward failed: {ex.Message}");
+            Notify(
+                "Downscale failed",
+                $"Could not queue the video: {ex.Message}",
+                NotificationSeverity.Error);
         }
     }
 
@@ -116,6 +130,10 @@ public partial class App
             {
                 CaptureLog.Write(
                     $"[downscale] WARNING tools missing: {tools.FFmpegPath} / {tools.FFprobePath}");
+                Notify(
+                    "Video Downscaler",
+                    "FFmpeg/FFprobe not found — video downscaling is unavailable.",
+                    NotificationSeverity.Warning);
             }
 
             // Ensure the Explorer right-click entry exists (idempotent, per-user).
@@ -125,38 +143,61 @@ public partial class App
             }
 
             downscaleService.JobFinished += OnDownscaleJobFinished;
+            downscaleService.Faulted += OnDownscaleFaulted;
             downscaleService.Start();
 
-            downscaleIpcServer.PathReceived += (_, path) => downscaleService.Enqueue(path);
+            downscaleIpcServer.PathReceived += (_, path) => EnqueueWithFeedback(path);
             downscaleIpcServer.Start();
 
             // Files passed to this very launch (we are the first instance).
             foreach (var file in parsed.Files)
             {
-                downscaleService.Enqueue(file);
+                EnqueueWithFeedback(file);
             }
         }
         catch (Exception ex)
         {
             CaptureLog.Write($"[downscale] feature init failed: {ex}");
+            ShowError($"Video Downscaler failed to start: {ex.Message}");
         }
     }
 
     private void OnDownscaleJobFinished(object? sender, DownscaleJobResult result)
     {
         var fileName = System.IO.Path.GetFileName(result.SourcePath);
-        var (title, message) = result.Outcome switch
+        var (title, message, severity) = result.Outcome switch
         {
             DownscaleOutcome.Completed =>
-                ("Downscale complete", $"{fileName} → {result.TargetResolution}"),
+                ("Downscale complete", $"{fileName} → {result.TargetResolution}", NotificationSeverity.Info),
             DownscaleOutcome.Skipped =>
-                ("Downscale skipped", $"{fileName}: {result.Message}"),
-            _ => ("Downscale failed", $"{fileName}: {result.Message}"),
+                ("Downscale skipped", $"{fileName}: {result.Message}", NotificationSeverity.Warning),
+            _ => ("Downscale failed", $"{fileName}: {result.Message}", NotificationSeverity.Error),
         };
 
-        // Tray service touches WinForms UI; marshal onto the UI thread.
-        Dispatcher.BeginInvoke(new Action(() =>
-            systemTrayService?.ShowNotification(title, message)));
+        // Notify marshals onto the UI thread (this fires on the worker thread).
+        Notify(title, message, severity);
+    }
+
+    /// <summary>Worker loop crashed; the queue is dead until restart. Tell the user.</summary>
+    private void OnDownscaleFaulted(object? sender, string detail) =>
+        Notify("Video Downscaler stopped", $"Background worker crashed: {detail}", NotificationSeverity.Error);
+
+    /// <summary>Enqueue with user feedback when a path is rejected (unsupported / missing).</summary>
+    private void EnqueueWithFeedback(string path)
+    {
+        if (downscaleService == null)
+        {
+            return;
+        }
+
+        if (!downscaleService.Enqueue(path))
+        {
+            var fileName = System.IO.Path.GetFileName(path);
+            Notify(
+                "Downscale skipped",
+                $"{fileName}: unsupported format or file not found.",
+                NotificationSeverity.Warning);
+        }
     }
 
     private void CleanupDownscaleFeature()

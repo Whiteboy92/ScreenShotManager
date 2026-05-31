@@ -14,6 +14,9 @@ public interface IDownscaleService
     /// <summary>Raised when a job is about to start encoding.</summary>
     event EventHandler<DownscaleRequest>? JobStarted;
 
+    /// <summary>Raised (on a background thread) if the worker loop crashes and the queue stops draining.</summary>
+    event EventHandler<string>? Faulted;
+
     /// <summary>Starts the background worker. Idempotent.</summary>
     void Start();
 

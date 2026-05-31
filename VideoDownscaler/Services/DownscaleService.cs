@@ -38,6 +38,7 @@ public sealed class DownscaleService : IDownscaleService, IDisposable
 
     public event EventHandler<DownscaleJobResult>? JobFinished;
     public event EventHandler<DownscaleRequest>? JobStarted;
+    public event EventHandler<string>? Faulted;
 
     public void Start()
     {
@@ -103,6 +104,7 @@ public sealed class DownscaleService : IDownscaleService, IDisposable
         catch (Exception ex)
         {
             CaptureLog.Write($"[downscale] worker crashed: {ex}");
+            Raise(Faulted, ex.Message);
         }
     }
 

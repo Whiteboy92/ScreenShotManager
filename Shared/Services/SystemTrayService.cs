@@ -66,9 +66,18 @@ public class SystemTrayService : ISystemTrayService
         return pauseItem;
     }
 
-    public void ShowNotification(string title, string message)
+    public void ShowNotification(string title, string message, NotificationSeverity severity = NotificationSeverity.Info)
     {
-        notifyIcon?.ShowBalloonTip(2000, title, message, ToolTipIcon.Info);
+        var icon = severity switch
+        {
+            NotificationSeverity.Error => ToolTipIcon.Error,
+            NotificationSeverity.Warning => ToolTipIcon.Warning,
+            _ => ToolTipIcon.Info,
+        };
+
+        // Errors/warnings linger longer so they aren't missed; info auto-dismisses quickly.
+        var timeoutMs = severity == NotificationSeverity.Info ? 2000 : 5000;
+        notifyIcon?.ShowBalloonTip(timeoutMs, title, message, icon);
     }
 
     public void Dispose()
