@@ -28,17 +28,29 @@ public partial class App
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
+        var parsed = ParseArgs(e.Args);
+
+        // Single-instance gate. A secondary launch (e.g. an Explorer "Downscale Video" click while
+        // the tray app is already running) forwards its file path over the pipe and exits here.
+        if (!TryBecomePrimaryOrForward(parsed))
+        {
+            return;
+        }
+
         // Create cancellation token for the entire app lifetime
         appCancellationTokenSource = new CancellationTokenSource();
-        
+
         InitializeServices();
         LoadSettings();
         SetupEventHandlers();
         StartServices();
-        
+
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        
-        if (e.Args.Length > 0 && e.Args[0] == "/settings")
+
+        // Downscale feature: IPC server, background queue and context-menu registration.
+        InitializeDownscaleFeature(parsed);
+
+        if (parsed.OpenSettings)
         {
             Dispatcher.BeginInvoke(new Action(OpenSettings));
         }
@@ -255,7 +267,9 @@ public partial class App
 
     private void CleanupServices()
     {
-        try { keyboardHookService?.Dispose(); } 
+        CleanupDownscaleFeature();
+
+        try { keyboardHookService?.Dispose(); }
         catch { /* Silently dispose */ }
 
         try { systemTrayService?.Dispose(); } 
