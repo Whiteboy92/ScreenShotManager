@@ -1,9 +1,9 @@
 # 📸 ScreenShotManager
 
-A powerful, lightweight desktop screenshot tool for Windows built with WPF (.NET 8) that replaces the default Print Screen functionality with advanced capture and annotation features.
+A powerful, lightweight desktop screenshot tool for Windows built with WPF (.NET 10) that replaces the default Print Screen functionality with advanced capture and annotation features. Also bundles a one-click **Video Downscaler** that hooks into the Explorer right-click menu.
 
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![.NET](https://img.shields.io/badge/.NET-8.0-purple)
+![.NET](https://img.shields.io/badge/.NET-10.0-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## ✨ Features
@@ -54,6 +54,23 @@ After selecting a region, annotate your screenshot before saving:
   - ❌ Exit
 - **Tray Notifications**: Get notified when screenshots are captured
 
+### 🎬 Video Downscaler (Explorer Context Menu)
+Right-click any video file in Windows Explorer and pick **"Downscale Video"** to re-encode it one resolution tier lower — no app window needed.
+
+- **One-click from Explorer**: Registers a per-user context-menu entry (HKCU, no admin required) for `.mp4`, `.mkv`, `.mov`, `.webm`, `.avi`, `.m4v`, `.ts`
+- **Bundled FFmpeg**: Uses the `Tools\ffmpeg.exe` / `Tools\ffprobe.exe` binaries shipped with the app — no system-wide install required
+- **Smart tier selection**: Reads the source resolution with FFprobe and drops to the next standard tier (4320 → 2160 → 1440 → 1080 → 720 → 480 → 360 → 240). Aspect ratio is preserved; files already at/below 426×240 are skipped
+  - `3840x2160 → 2560x1440`
+  - `2104x1200 → 1920x1080`
+  - `1920x1080 → 1280x720`
+- **Background & sequential**: Multiple selected files are queued and processed one at a time without freezing the tray app
+- **Single instance via IPC**: A click while the app is already running forwards the file path to the running instance over a Named Pipe instead of launching a duplicate
+- **Safe output naming**: Saves next to the original as `movie.downscaled.mp4`, falling back to `movie.downscaled (1).mp4` on collisions; the original is never touched
+- **Encode settings**: `libx264`, `-crf 23`, `-preset medium`, audio stream copied (`-c:a copy`)
+- **Progress & errors**: Surfaced via tray notifications and logged to `%AppData%\ScreenShotManager\hdr-capture.log`
+
+The CLI entry point is `ScreenShotManager.exe --downscale "<file>"`, which Windows invokes from the context menu.
+
 ## 🎮 Keyboard Shortcuts
 
 | Key | Action |
@@ -69,7 +86,7 @@ After selecting a region, annotate your screenshot before saving:
 
 ### Requirements
 - Windows 10/11
-- .NET 8.0 Runtime
+- .NET 10.0 Runtime
 
 ### Installation
 1. Download the latest release
@@ -113,11 +130,13 @@ After selecting a region, annotate your screenshot before saving:
 ## 🛠️ Technical Details
 
 ### Built With
-- **Framework**: WPF (.NET 8)
+- **Framework**: WPF (.NET 10)
 - **Architecture**: SOLID principles with clean separation of concerns
-- **Services**: Dependency injection pattern
+- **Services**: Dependency injection pattern (`Microsoft.Extensions.DependencyInjection`)
 - **Keyboard Hook**: Global Windows keyboard hook (Win32 API)
 - **Screen Capture**: GDI+ for high-quality captures
+- **Video**: Bundled FFmpeg/FFprobe driven via `System.Diagnostics.Process`
+- **IPC**: Named Pipes + single-instance mutex for context-menu launches
 - **Settings**: JSON-based configuration
 
 ### Project Structure
@@ -127,14 +146,17 @@ ScreenShotManager/
 │   ├── Overlay/          # Screen capture overlay
 │   ├── Settings/         # Settings window
 │   └── Components/       # Reusable UI components
+├── ViewModels/           # Bindable view models (DownscaleViewModel)
 ├── Services/             # Business logic
 │   ├── KeyboardHookService
 │   ├── ScreenCaptureService
 │   ├── SettingsService
-│   └── SystemTrayService
-├── Models/               # Data models
+│   ├── SystemTrayService
+│   └── Downscaling/      # FFprobe/FFmpeg wrappers, queue, IPC, context-menu
+├── Models/               # Data models (incl. Downscaling/)
 ├── Helpers/              # Utility classes
-└── Converters/           # XAML value converters
+├── Converters/           # XAML value converters
+└── Tools/                # Bundled ffmpeg.exe & ffprobe.exe
 ```
 
 ## 🔧 Advanced Configuration
@@ -167,6 +189,15 @@ Edit `%AppData%\ScreenShotManager\config.json` for advanced options:
 **Hotkey conflicts with other apps:**
 - Use the "Pause Hotkey" option to temporarily disable
 - Close other screenshot tools that may intercept PrtSc
+
+**"Downscale Video" missing from the right-click menu:**
+- The entry is registered on first launch — start the app once
+- Re-launch the app; registration is per-user (HKCU) and idempotent
+
+**Downscale does nothing / fails:**
+- Confirm `Tools\ffmpeg.exe` and `Tools\ffprobe.exe` sit next to the executable
+- Files already at or below 426×240 are skipped by design
+- Check `%AppData%\ScreenShotManager\hdr-capture.log` for the FFmpeg error output
 
 ## 📝 License
 
