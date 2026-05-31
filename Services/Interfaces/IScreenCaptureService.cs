@@ -9,6 +9,7 @@ namespace ScreenShotManager.Services.Interfaces;
 /// </summary>
 public interface IScreenCaptureService
 {
+    Bitmap CaptureRegion(int x, int y, int width, int height);
     Task<Bitmap> CaptureRegionAsync(int x, int y, int width, int height);
     Task SaveToFileAsync(Bitmap bitmap, string filePath, string format);
     Task CopyToClipboardAsync(Bitmap bitmap);

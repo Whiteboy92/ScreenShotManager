@@ -3,8 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OverlayWindow" 
         WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
+        Background="Black"
         Topmost="True"
         ShowInTaskbar="False"
         WindowState="Normal"
@@ -43,11 +42,7 @@
                        Fill="Transparent"
                        Visibility="Collapsed"
                        IsHitTestVisible="False"
-                       Panel.ZIndex="10">
-                <Rectangle.Effect>
-                    <DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="0" Opacity="0.5"/>
-                </Rectangle.Effect>
-            </Rectangle>
+                       Panel.ZIndex="10"/>
             
             <!-- Annotation canvas -->
             <Canvas x:Name="AnnotationCanvas"

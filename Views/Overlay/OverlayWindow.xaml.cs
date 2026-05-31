@@ -37,7 +37,6 @@ public partial class OverlayWindow
     private Color currentColor = Colors.Red;
     private double currentBrushSize = 3;
     
-    private int updateCounter = 0;
     private bool selectionFinalized;
     
     private Bitmap? fullScreenCapture;
@@ -64,8 +63,9 @@ public partial class OverlayWindow
             this.settings = settings ?? throw new ArgumentNullException(nameof(settings));
             
             SetupWindow();
+            CaptureFrozenScreen();
             SetupEventHandlers();
-            
+
             Loaded += OnWindowLoaded;
         }
         catch (Exception ex)
@@ -103,28 +103,26 @@ public partial class OverlayWindow
             Height = bounds.Height;
         }
 
-        CaptureFullScreen();
-
         InitializeDimming();
-        
+
         Focus();
     }
 
-    private async void CaptureFullScreen()
+    /// <summary>
+    /// Captures the frozen screen synchronously before the window is shown.
+    /// Running before display gives a clean capture (no overlay in frame) and
+    /// lets the window use an opaque, hardware-accelerated surface for smooth dragging.
+    /// </summary>
+    private void CaptureFrozenScreen()
     {
         try
         {
-            var x = (int)Left;
-            var y = (int)Top;
-            var width = (int)ActualWidth;
-            var height = (int)ActualHeight;
+            var bounds = GeometryHelper.GetVirtualScreenBounds();
 
-            fullScreenCapture = await captureService.CaptureRegionAsync(x, y, width, height);
+            fullScreenCapture = captureService.CaptureRegion(
+                (int)bounds.Left, (int)bounds.Top, (int)bounds.Width, (int)bounds.Height);
 
-            // Use optimized conversion and cache the result
-            frozenScreenCache = await Task.Run(() => 
-                BitmapHelper.BitmapToBitmapSourceOptimized(fullScreenCapture));
-            
+            frozenScreenCache = BitmapHelper.BitmapToBitmapSourceOptimized(fullScreenCapture);
             FrozenScreenImage.Source = frozenScreenCache;
         }
         catch (Exception ex)
@@ -325,18 +323,9 @@ public partial class OverlayWindow
         }
 
         selectionBounds = GeometryHelper.CreateRectFromPoints(dragStartPoint, currentPosition);
-        
-        // Throttle updates for better performance
-        updateCounter++;
-        
-        // Update visuals every frame
+
         UpdateSelectionVisuals();
-        
-        // Update dimming every 2nd frame (reduce rendering load)
-        if (updateCounter % 2 == 0)
-        {
-            UpdateDimmingOverlay(selectionBounds);
-        }
+        UpdateDimmingOverlay(selectionBounds);
     }
 
     private void UpdateResizing(Point currentPosition)
@@ -390,8 +379,7 @@ public partial class OverlayWindow
     private void CompleteCreatingSelection()
     {
         isCreatingSelection = false;
-        updateCounter = 0;
-        
+
         MainCanvas.ReleaseMouseCapture();
 
         if (!hasDragged)
@@ -422,8 +410,7 @@ public partial class OverlayWindow
     {
         isResizingSelection = false;
         activeResizeHandle = ResizeHandle.None;
-        updateCounter = 0;
-        
+
         MainCanvas.ReleaseMouseCapture();
         
         if (GeometryHelper.IsValidSelection(selectionBounds))
