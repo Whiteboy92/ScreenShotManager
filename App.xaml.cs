@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using ScreenShotManager.Models;
@@ -12,9 +13,6 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace ScreenShotManager;
 
-/// <summary>
-/// Interaction logic for App.xaml - Main application entry point
-/// </summary>
 public partial class App
 {
     // Services
@@ -22,12 +20,17 @@ public partial class App
     private ISystemTrayService? systemTrayService;
     private IScreenCaptureService? screenCaptureService;
     private ISettingsService? settingsService;
+    private IVolumeMonitorService? inputVolumeMonitorService;
     
     // State
     private AppSettings settings = new();
+    private CancellationTokenSource? appCancellationTokenSource;
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
+        // Create cancellation token for the entire app lifetime
+        appCancellationTokenSource = new CancellationTokenSource();
+        
         InitializeServices();
         LoadSettings();
         SetupEventHandlers();
@@ -37,7 +40,7 @@ public partial class App
         
         if (e.Args.Length > 0 && e.Args[0] == "/settings")
         {
-            Dispatcher.BeginInvoke(new Action(() => OpenSettings()));
+            Dispatcher.BeginInvoke(new Action(OpenSettings));
         }
     }
 
@@ -49,6 +52,7 @@ public partial class App
             screenCaptureService = new ScreenCaptureService();
             keyboardHookService = new KeyboardHookService();
             systemTrayService = new SystemTrayService();
+            inputVolumeMonitorService = new InputVolumeMonitorService();
         }
         catch (Exception ex)
         {
@@ -100,6 +104,11 @@ public partial class App
         {
             systemTrayService?.Initialize();
             keyboardHookService?.Start();
+            
+            if (inputVolumeMonitorService != null && appCancellationTokenSource != null)
+            {
+                _ = inputVolumeMonitorService.StartMonitoringAsync(appCancellationTokenSource.Token);
+            }
         }
         catch (Exception ex)
         {
@@ -158,7 +167,7 @@ public partial class App
             if (screenCaptureService == null)
             {
                 ShowError("Screen capture service is not initialized.");
-                bitmap?.Dispose();
+                bitmap.Dispose();
                 return;
             }
 
@@ -181,7 +190,7 @@ public partial class App
         }
         catch (Exception ex)
         {
-            bitmap?.Dispose();
+            bitmap.Dispose();
             ShowError($"Error processing screenshot: {ex.Message}\n\nFile: {settings.SaveFolder}\nDetails: {ex.InnerException?.Message ?? "None"}");
         }
     }
@@ -250,6 +259,14 @@ public partial class App
         catch { /* Silently dispose */ }
 
         try { systemTrayService?.Dispose(); } 
+        catch { /* Silently dispose */ }
+        
+        try 
+        { 
+            inputVolumeMonitorService?.StopMonitoring();
+            appCancellationTokenSource?.Cancel();
+            appCancellationTokenSource?.Dispose();
+        } 
         catch { /* Silently dispose */ }
     }
 
