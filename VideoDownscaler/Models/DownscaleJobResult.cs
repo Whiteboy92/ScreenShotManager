@@ -21,12 +21,11 @@ public sealed record DownscaleJobResult(
     DownscaleOutcome Outcome,
     VideoResolution? SourceResolution = null,
     VideoResolution? TargetResolution = null,
-    string? OutputPath = null,
     string? Message = null)
 {
     public static DownscaleJobResult Completed(
-        string source, VideoResolution from, VideoResolution to, string output) =>
-        new(source, DownscaleOutcome.Completed, from, to, output);
+        string source, VideoResolution from, VideoResolution to) =>
+        new(source, DownscaleOutcome.Completed, from, to);
 
     public static DownscaleJobResult Skipped(string source, VideoResolution res, string reason) =>
         new(source, DownscaleOutcome.Skipped, res, Message: reason);

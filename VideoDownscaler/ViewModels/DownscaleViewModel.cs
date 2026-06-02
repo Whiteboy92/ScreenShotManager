@@ -91,7 +91,7 @@ public sealed class DownscaleViewModel : INotifyPropertyChanged, IDisposable
             var label = result.Outcome switch
             {
                 DownscaleOutcome.Completed =>
-                    $"Done → {result.TargetResolution}",
+                    $"Done {result.SourceResolution} → {result.TargetResolution}",
                 DownscaleOutcome.Skipped => $"Skipped ({result.Message})",
                 _ => $"Failed ({result.Message})",
             };
