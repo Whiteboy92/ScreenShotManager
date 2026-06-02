@@ -168,7 +168,7 @@ public partial class App
         var (title, message, severity) = result.Outcome switch
         {
             DownscaleOutcome.Completed =>
-                ("Downscale complete", $"{fileName} → {result.TargetResolution}", NotificationSeverity.Info),
+                ("Downscale complete", $"{fileName} {result.SourceResolution} → {result.TargetResolution}", NotificationSeverity.Info),
             DownscaleOutcome.Skipped =>
                 ("Downscale skipped", $"{fileName}: {result.Message}", NotificationSeverity.Warning),
             _ => ("Downscale failed", $"{fileName}: {result.Message}", NotificationSeverity.Error),

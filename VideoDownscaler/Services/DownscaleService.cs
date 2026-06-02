@@ -133,7 +133,7 @@ public sealed class DownscaleService : IDownscaleService, IDisposable
             await ffmpeg.DownscaleAsync(source, output, target.Value, token).ConfigureAwait(false);
 
             CaptureLog.Write($"[downscale] done: {output}");
-            return DownscaleJobResult.Completed(source, resolution, target.Value, output);
+            return DownscaleJobResult.Completed(source, resolution, target.Value);
         }
         catch (OperationCanceledException)
         {
