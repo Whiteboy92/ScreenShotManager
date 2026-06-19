@@ -142,6 +142,8 @@ public partial class App
                 contextMenu.Register();
             }
 
+            downscaleService.JobStarted += OnDownscaleJobStarted;
+            downscaleService.JobProgress += OnDownscaleJobProgress;
             downscaleService.JobFinished += OnDownscaleJobFinished;
             downscaleService.Faulted += OnDownscaleFaulted;
             downscaleService.Start();
@@ -162,8 +164,50 @@ public partial class App
         }
     }
 
+    /// <summary>Last whole-percent pushed to the tray, so we don't spam identical tooltips.</summary>
+    private int lastProgressPercent = -1;
+
+    private void OnDownscaleJobStarted(object? sender, DownscaleRequest request)
+    {
+        lastProgressPercent = -1;
+        var fileName = System.IO.Path.GetFileName(request.SourcePath);
+        SetTrayStatus($"Downscaling {fileName}…");
+        Notify("Downscale started", fileName, NotificationSeverity.Info);
+    }
+
+    private void OnDownscaleJobProgress(object? sender, DownscaleProgress progress)
+    {
+        var percent = (int)(progress.Fraction * 100);
+        if (percent == lastProgressPercent)
+        {
+            return;
+        }
+
+        lastProgressPercent = percent;
+        var fileName = System.IO.Path.GetFileName(progress.SourcePath);
+        SetTrayStatus($"Downscaling {fileName} — {percent}%");
+    }
+
+    /// <summary>Marshals a tray tooltip update onto the UI thread (events fire on the worker).</summary>
+    private void SetTrayStatus(string? status)
+    {
+        void Apply() => systemTrayService?.SetStatus(status);
+
+        if (Dispatcher.CheckAccess())
+        {
+            Apply();
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(new Action(Apply));
+        }
+    }
+
     private void OnDownscaleJobFinished(object? sender, DownscaleJobResult result)
     {
+        // Restore the default tooltip; a queued job's JobStarted will overwrite it immediately.
+        SetTrayStatus(null);
+
         var fileName = System.IO.Path.GetFileName(result.SourcePath);
         var (title, message, severity) = result.Outcome switch
         {

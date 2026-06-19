@@ -21,7 +21,8 @@ internal static class ProcessRunner
     public static async Task<ProcessResult> RunAsync(
         string exePath,
         string arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<string>? onStdOutLine = null)
     {
         using var process = new Process
         {
@@ -41,7 +42,16 @@ internal static class ProcessRunner
 
         var stdOut = new StringBuilder();
         var stdErr = new StringBuilder();
-        process.OutputDataReceived += (_, e) => { if (e.Data != null) stdOut.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data == null)
+            {
+                return;
+            }
+
+            stdOut.AppendLine(e.Data);
+            onStdOutLine?.Invoke(e.Data);
+        };
         process.ErrorDataReceived += (_, e) => { if (e.Data != null) stdErr.AppendLine(e.Data); };
 
         if (!process.Start())

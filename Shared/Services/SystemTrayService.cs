@@ -10,6 +10,8 @@ namespace ScreenShotManager.Shared.Services;
 /// </summary>
 public class SystemTrayService : ISystemTrayService
 {
+    private const string DefaultTooltip = "ScreenShotManager - Screenshot Tool";
+
     private NotifyIcon? notifyIcon;
 
     public event EventHandler? OpenSettingsRequested;
@@ -24,7 +26,7 @@ public class SystemTrayService : ISystemTrayService
         {
             Icon = IconHelper.CreateTrayIcon(),
             Visible = true,
-            Text = "ScreenShotManager - Screenshot Tool",
+            Text = DefaultTooltip,
         };
 
         var contextMenu = CreateContextMenu();
@@ -78,6 +80,24 @@ public class SystemTrayService : ISystemTrayService
         // Errors/warnings linger longer so they aren't missed; info auto-dismisses quickly.
         var timeoutMs = severity == NotificationSeverity.Info ? 2000 : 5000;
         notifyIcon?.ShowBalloonTip(timeoutMs, title, message, icon);
+    }
+
+    public void SetStatus(string? status)
+    {
+        if (notifyIcon == null)
+        {
+            return;
+        }
+
+        var text = string.IsNullOrWhiteSpace(status) ? DefaultTooltip : status;
+
+        // NotifyIcon.Text is capped at 63 chars on legacy shells; trim defensively.
+        if (text.Length > 63)
+        {
+            text = string.Concat(text.AsSpan(0, 62), "…");
+        }
+
+        notifyIcon.Text = text;
     }
 
     public void Dispose()

@@ -15,5 +15,11 @@ public interface ISystemTrayService : IDisposable
     
     void Initialize();
     void ShowNotification(string title, string message, NotificationSeverity severity = NotificationSeverity.Info);
+
+    /// <summary>
+    /// Sets the tray icon hover tooltip. Pass null/empty to restore the default text.
+    /// Used to surface live downscale progress. Must be called on the UI thread.
+    /// </summary>
+    void SetStatus(string? status);
 }
 

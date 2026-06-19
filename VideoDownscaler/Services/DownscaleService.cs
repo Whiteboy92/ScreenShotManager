@@ -38,6 +38,7 @@ public sealed class DownscaleService : IDownscaleService, IDisposable
 
     public event EventHandler<DownscaleJobResult>? JobFinished;
     public event EventHandler<DownscaleRequest>? JobStarted;
+    public event EventHandler<DownscaleProgress>? JobProgress;
     public event EventHandler<string>? Faulted;
 
     public void Start()
@@ -130,7 +131,13 @@ public sealed class DownscaleService : IDownscaleService, IDisposable
             var output = OutputPathResolver.Resolve(source);
             CaptureLog.Write($"[downscale] {resolution} -> {target.Value}: {source} => {output}");
 
-            await ffmpeg.DownscaleAsync(source, output, target.Value, token).ConfigureAwait(false);
+            // Best-effort duration so the encode can report a percentage; zero just disables it.
+            var duration = await ffprobe.GetDurationAsync(source, token).ConfigureAwait(false);
+            var progress = new Progress<double>(
+                fraction => Raise(JobProgress, new DownscaleProgress(source, fraction)));
+
+            await ffmpeg.DownscaleAsync(source, output, target.Value, duration, progress, token)
+                .ConfigureAwait(false);
 
             CaptureLog.Write($"[downscale] done: {output}");
             return DownscaleJobResult.Completed(source, resolution, target.Value);

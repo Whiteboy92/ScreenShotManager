@@ -43,6 +43,46 @@ public sealed class FFprobeService : IFFprobeService
         return Parse(result.StdOut, filePath);
     }
 
+    public async Task<TimeSpan> GetDurationAsync(
+        string filePath, CancellationToken cancellationToken = default)
+    {
+        var args = $"-v error -show_entries format=duration -of json \"{filePath}\"";
+
+        var result = await ProcessRunner.RunAsync(tools.FFprobePath, args, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.Success)
+        {
+            // Duration is best-effort: a failure here just disables the progress %, not the encode.
+            CaptureLog.Write($"[downscale] duration probe failed ({result.ExitCode}): {filePath}");
+            return TimeSpan.Zero;
+        }
+
+        return ParseDuration(result.StdOut);
+    }
+
+    private static TimeSpan ParseDuration(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("format", out var format) &&
+                format.TryGetProperty("duration", out var prop) &&
+                double.TryParse(
+                    prop.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) &&
+                seconds > 0)
+            {
+                return TimeSpan.FromSeconds(seconds);
+            }
+        }
+        catch (JsonException)
+        {
+            // fall through — unknown duration
+        }
+
+        return TimeSpan.Zero;
+    }
+
     private static VideoResolution Parse(string json, string filePath)
     {
         try
