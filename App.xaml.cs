@@ -120,16 +120,61 @@ public partial class App
         {
             systemTrayService?.Initialize();
             keyboardHookService?.Start();
-            
+
             if (inputVolumeMonitorService != null && appCancellationTokenSource != null)
             {
                 _ = inputVolumeMonitorService.StartMonitoringAsync(appCancellationTokenSource.Token);
             }
+
+            WarmUpCapturePipeline();
         }
         catch (Exception ex)
         {
             ShowError($"Failed to start services: {ex.Message}\n\nSome features may not work correctly.");
         }
+    }
+
+    /// <summary>
+    /// Pays the one-time costs of the first screenshot up front so PrtSc feels instant:
+    /// spins up the DXGI capture pipeline on a background thread and warms the WPF render
+    /// thread (BAML/render-thread init) with a throwaway off-screen window. Both best-effort.
+    /// </summary>
+    private void WarmUpCapturePipeline()
+    {
+        var capture = screenCaptureService;
+        if (capture != null)
+        {
+            _ = Task.Run(() =>
+            {
+                try { capture.WarmUp(); }
+                catch { /* warm-up must never crash startup */ }
+            });
+        }
+
+        Dispatcher.BeginInvoke(new Action(WarmUpWpfRenderThread),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
+    private static void WarmUpWpfRenderThread()
+    {
+        try
+        {
+            var warm = new Window
+            {
+                Width = 1,
+                Height = 1,
+                Left = -32000,
+                Top = -32000,
+                WindowStyle = WindowStyle.None,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+            };
+            warm.Show();
+            warm.Close();
+        }
+        catch { /* warm-up must never crash startup */ }
     }
 
     private void OnPauseToggled(object? sender, bool isPaused)
@@ -276,9 +321,12 @@ public partial class App
         try { keyboardHookService?.Dispose(); }
         catch { /* Silently dispose */ }
 
-        try { systemTrayService?.Dispose(); } 
+        try { systemTrayService?.Dispose(); }
         catch { /* Silently dispose */ }
-        
+
+        try { screenCaptureService?.Dispose(); }
+        catch { /* Silently dispose */ }
+
         try 
         { 
             inputVolumeMonitorService?.StopMonitoring();

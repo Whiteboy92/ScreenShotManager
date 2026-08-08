@@ -16,9 +16,23 @@ public class ScreenCaptureService : IScreenCaptureService
 {
     private readonly HdrScreenCapturer hdrCapturer = new();
 
+    public void WarmUp()
+    {
+        try
+        {
+            CaptureLog.Session("WarmUp");
+            hdrCapturer.WarmUp();
+        }
+        catch (Exception ex)
+        {
+            CaptureLog.Write($"WarmUp failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     public Bitmap CaptureRegion(int x, int y, int width, int height)
     {
         Bitmap? full = null;
+        CaptureLog.BeginBatch();
         try
         {
             CaptureLog.Session($"CaptureRegion x={x} y={y} w={width} h={height}");
@@ -49,6 +63,10 @@ public class ScreenCaptureService : IScreenCaptureService
             full?.Dispose();
             CaptureLog.Write($"DXGI FAILED -> GDI fallback (HDR will clip bright). {ex.GetType().Name}: {ex.Message}");
             return CaptureRegionGdi(x, y, width, height);
+        }
+        finally
+        {
+            CaptureLog.Flush();
         }
     }
 
@@ -131,6 +149,11 @@ public class ScreenCaptureService : IScreenCaptureService
     public Bitmap ConvertToBitmap(BitmapSource bitmapSource)
     {
         return BitmapHelper.BitmapSourceToBitmap(bitmapSource);
+    }
+
+    public void Dispose()
+    {
+        hdrCapturer.Dispose();
     }
 }
 
