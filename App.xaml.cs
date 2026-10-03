@@ -29,6 +29,7 @@ public partial class App
     // State
     private AppSettings settings = new();
     private CancellationTokenSource? appCancellationTokenSource;
+    private bool isCapturing;
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
@@ -199,6 +200,14 @@ public partial class App
 
     private void HandleScreenCapture()
     {
+        // ShowDialog pumps a nested message loop, so PrtSc presses queued while the overlay is
+        // open would re-enter here and stack overlays (screenshot of a screenshot). Ignore them.
+        if (isCapturing)
+        {
+            return;
+        }
+
+        isCapturing = true;
         try
         {
             if (screenCaptureService == null)
@@ -218,6 +227,10 @@ public partial class App
         catch (Exception ex)
         {
             ShowError($"Error capturing screenshot: {ex.Message}\n\nStack trace:\n{ex.StackTrace}");
+        }
+        finally
+        {
+            isCapturing = false;
         }
     }
 
