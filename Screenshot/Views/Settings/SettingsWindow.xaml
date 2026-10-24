@@ -162,7 +162,8 @@
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
-                            Padding="20">
+                            Padding="20"
+                            Margin="0,0,0,15">
                         <StackPanel>
                             <TextBlock Text="🧹 Auto-Clean" 
                                        Style="{StaticResource SectionHeaderStyle}"
@@ -196,6 +197,55 @@
                                                VerticalAlignment="Center"/>
                                 </Border>
                             </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Music sync -->
+                    <Border Background="{StaticResource CardBackgroundBrush}" 
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="20">
+                        <StackPanel>
+                            <TextBlock Text="🎵 Music Sync" 
+                                       Style="{StaticResource SectionHeaderStyle}"
+                                       FontSize="15"
+                                       Margin="0,0,0,15"/>
+
+                            <CheckBox x:Name="MusicSyncEnabledCheckBox" 
+                                      Content="Let my phone download songs over Wi-Fi"
+                                      Style="{StaticResource ModernCheckBoxStyle}"
+                                      Margin="0,0,0,15"/>
+
+                            <TextBlock Text="Music folder to share:" 
+                                       Style="{StaticResource LabelStyle}"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="MusicFolderTextBox" 
+                                         Grid.Column="0"
+                                         IsReadOnly="True" 
+                                         Style="{StaticResource ModernTextBoxStyle}"
+                                         Margin="0,0,10,0"/>
+                                <Button x:Name="BrowseMusicFolderButton" 
+                                        Grid.Column="1"
+                                        Content="Browse..." 
+                                        Style="{StaticResource SecondaryButtonStyle}"/>
+                            </Grid>
+
+                            <TextBlock Text="Port:" 
+                                       Style="{StaticResource LabelStyle}"/>
+                            <TextBox x:Name="MusicSyncPortTextBox" 
+                                     Width="120"
+                                     HorizontalAlignment="Left"
+                                     Style="{StaticResource ModernTextBoxStyle}"/>
+                            <TextBlock Text="Changes apply when this window closes. Pair your phone from the tray menu → Pair Phone…" 
+                                       FontSize="11" 
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Margin="0,8,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

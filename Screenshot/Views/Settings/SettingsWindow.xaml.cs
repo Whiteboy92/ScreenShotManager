@@ -43,6 +43,10 @@ public partial class SettingsWindow
         DisableDimmingCheckBox.Unchecked += (_, _) => SaveDisableDimming(false);
         StartOnLoginCheckBox.Checked += OnStartOnLoginChecked;
         StartOnLoginCheckBox.Unchecked += OnStartOnLoginUnchecked;
+        MusicSyncEnabledCheckBox.Checked += (_, _) => SaveMusicSyncEnabled(true);
+        MusicSyncEnabledCheckBox.Unchecked += (_, _) => SaveMusicSyncEnabled(false);
+        BrowseMusicFolderButton.Click += OnBrowseMusicFolderClick;
+        MusicSyncPortTextBox.TextChanged += OnMusicSyncPortChanged;
     }
 
     private void ScrollViewer_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
@@ -75,6 +79,9 @@ public partial class SettingsWindow
             DisableDimmingCheckBox.IsChecked = settings.DisableDimming;
             StartOnLoginCheckBox.IsChecked = settings.StartOnLogin;
             MaxHistorySlider.Value = settings.MaxAutoSaveHistory;
+            MusicSyncEnabledCheckBox.IsChecked = settings.MusicSyncEnabled;
+            MusicFolderTextBox.Text = settings.MusicFolder;
+            MusicSyncPortTextBox.Text = settings.MusicSyncPort.ToString();
             
             UpdateMaxHistoryText();
             UpdateFilenamePreview();
@@ -154,6 +161,64 @@ public partial class SettingsWindow
         catch (Exception ex)
         {
             ShowError($"Failed to save dimming setting: {ex.Message}");
+        }
+    }
+
+    private void SaveMusicSyncEnabled(bool isEnabled)
+    {
+        try
+        {
+            settings.MusicSyncEnabled = isEnabled;
+            settingsService.Save(settings);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Failed to save music sync setting: {ex.Message}");
+        }
+    }
+
+    private void OnMusicSyncPortChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        // Ignore partial/invalid input; the last valid port is kept. 1024+ avoids privileged ports.
+        if (!int.TryParse(MusicSyncPortTextBox.Text, out var port) || port < 1024 || port > 65535)
+        {
+            return;
+        }
+
+        try
+        {
+            settings.MusicSyncPort = port;
+            settingsService.Save(settings);
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Failed to save music sync port: {ex.Message}");
+        }
+    }
+
+    private void OnBrowseMusicFolderClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new FolderBrowserDialog
+            {
+                Description = "Select the music folder your phone syncs from",
+                SelectedPath = settings.MusicFolder,
+                ShowNewFolderButton = true,
+            };
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK &&
+                !string.IsNullOrEmpty(dialog.SelectedPath))
+            {
+                MusicFolderTextBox.Text = dialog.SelectedPath;
+
+                settings.MusicFolder = dialog.SelectedPath;
+                settingsService.Save(settings);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Error opening folder browser: {ex.Message}");
         }
     }
 

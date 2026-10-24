@@ -19,6 +19,27 @@ public class AppSettings
     public bool StartOnLogin { get; set; }
     public int MaxAutoSaveHistory { get; set; } = 100;
 
+    // Music Sync (LAN API the Android player pulls new songs from).
+    public bool MusicSyncEnabled { get; set; }
+
+    public string MusicFolder { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+
+    public int MusicSyncPort { get; set; } = 47821;
+
+    /// <summary>Shared secret handed to the phone via the pairing QR code. Generated on first start.</summary>
+    public string MusicSyncToken { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Where the phone app's settings/playlists backup is saved. Empty = a sibling of the music
+    /// folder named "&lt;music folder&gt; Settings" (e.g. C:\Music → C:\Music Settings).
+    /// </summary>
+    public string MusicBackupFolder { get; set; } = string.Empty;
+
+    public string GetMusicBackupFolder() =>
+        string.IsNullOrWhiteSpace(MusicBackupFolder)
+            ? MusicFolder.TrimEnd('\\', '/') + " Settings"
+            : MusicBackupFolder;
+
     public string GetFileName()
     {
         var now = DateTime.Now;

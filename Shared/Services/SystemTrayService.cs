@@ -19,6 +19,7 @@ public class SystemTrayService : ISystemTrayService
     public event EventHandler? ExitRequested;
     public event EventHandler<bool>? PauseToggled;
     public event EventHandler? TakeScreenshotRequested;
+    public event EventHandler? PairPhoneRequested;
 
     public void Initialize()
     {
@@ -45,6 +46,8 @@ public class SystemTrayService : ISystemTrayService
             (_, _) => OpenSettingsRequested?.Invoke(this, EventArgs.Empty));
         contextMenu.Items.Add("Open Save Folder", null, 
             (_, _) => OpenSaveFolderRequested?.Invoke(this, EventArgs.Empty));
+        contextMenu.Items.Add("🎵 Pair Phone…", null,
+            (_, _) => PairPhoneRequested?.Invoke(this, EventArgs.Empty));
         contextMenu.Items.Add(new ToolStripSeparator());
         
         var pauseItem = CreatePauseMenuItem();

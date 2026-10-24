@@ -12,6 +12,7 @@ public interface ISystemTrayService : IDisposable
     event EventHandler? ExitRequested;
     event EventHandler<bool>? PauseToggled;
     event EventHandler? TakeScreenshotRequested;
+    event EventHandler? PairPhoneRequested;
     
     void Initialize();
     void ShowNotification(string title, string message, NotificationSeverity severity = NotificationSeverity.Info);

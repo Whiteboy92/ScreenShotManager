@@ -39,4 +39,14 @@ public class AppSettingsTests
         var s = new AppSettings { FilenamePattern = "img_{foo}", FileFormat = "PNG" };
         Assert.Equal("img_{foo}.png", s.GetFileName());
     }
+
+    [Theory]
+    [InlineData(@"C:\Whiteboy\Admin\MusicMp3", "", @"C:\Whiteboy\Admin\MusicMp3 Settings")]
+    [InlineData(@"C:\Music\", "", @"C:\Music Settings")]
+    [InlineData(@"C:\Music", @"D:\Backups", @"D:\Backups")]
+    public void Music_backup_folder_defaults_to_sibling_of_music_folder(string music, string configured, string expected)
+    {
+        var s = new AppSettings { MusicFolder = music, MusicBackupFolder = configured };
+        Assert.Equal(expected, s.GetMusicBackupFolder());
+    }
 }

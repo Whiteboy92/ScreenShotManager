@@ -55,6 +55,9 @@ public partial class App
         // Downscale feature: IPC server, background queue and context-menu registration.
         InitializeDownscaleFeature(parsed);
 
+        // Music sync feature: LAN API the Android player downloads new songs from.
+        InitializeMusicSyncFeature();
+
         if (parsed.OpenSettings)
         {
             Dispatcher.BeginInvoke(new Action(OpenSettings));
@@ -105,6 +108,7 @@ public partial class App
                 systemTrayService.TakeScreenshotRequested += (_, _) => HandleScreenCapture();
                 systemTrayService.OpenSettingsRequested += (_, _) => OpenSettings();
                 systemTrayService.OpenSaveFolderRequested += (_, _) => OpenSaveFolder();
+                systemTrayService.PairPhoneRequested += (_, _) => OpenPairingWindow();
                 systemTrayService.ExitRequested += (_, _) => ExitApplication();
                 systemTrayService.PauseToggled += OnPauseToggled;
             }
@@ -284,6 +288,9 @@ public partial class App
             {
                 LoadSettings();
             }
+
+            // The window auto-saves into `settings`, so apply music sync changes however it closed.
+            ApplyMusicSyncSettings();
         }
         catch (Exception ex)
         {
@@ -330,6 +337,7 @@ public partial class App
     private void CleanupServices()
     {
         CleanupDownscaleFeature();
+        CleanupMusicSyncFeature();
 
         try { keyboardHookService?.Dispose(); }
         catch { /* Silently dispose */ }
