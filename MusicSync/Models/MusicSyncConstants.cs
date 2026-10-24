@@ -11,6 +11,15 @@ public static class MusicSyncConstants
     /// <summary>Bumped on breaking API changes so the phone can refuse an incompatible PC.</summary>
     public const int ApiVersion = 1;
 
+    /// <summary>
+    /// Version of the pairing QR/link format. 2: carries a one-time <c>code</c> the phone trades
+    /// for its own token via <c>POST /api/pair</c> (1 carried the shared token itself).
+    /// </summary>
+    public const int PairingVersion = 2;
+
+    /// <summary>How long a pairing code shown in the QR stays valid.</summary>
+    public static readonly TimeSpan PairingCodeLifetime = TimeSpan.FromMinutes(5);
+
     /// <summary>DNS-SD service type the phone browses for (Android <c>NsdManager</c>).</summary>
     public const string MdnsServiceType = "_musicsync._tcp";
 

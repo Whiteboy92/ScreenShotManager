@@ -26,7 +26,10 @@ public class AppSettings
 
     public int MusicSyncPort { get; set; } = 47821;
 
-    /// <summary>Shared secret handed to the phone via the pairing QR code. Generated on first start.</summary>
+    /// <summary>
+    /// Legacy shared secret from before per-device pairing. Moved into the devices registry
+    /// (as a hash) on start and cleared, so it no longer sits in config.json in plain text.
+    /// </summary>
     public string MusicSyncToken { get; set; } = string.Empty;
 
     /// <summary>

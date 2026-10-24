@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:components="clr-namespace:ScreenShotManager.Shared.Components"
         Title="Pair Phone"
-        Height="660" Width="440"
-        MinHeight="660" MinWidth="440"
+        Height="820" Width="440"
+        MinHeight="820" MinWidth="440"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Background="{StaticResource BackgroundBrush}"
@@ -41,16 +41,22 @@
                     Padding="12"
                     HorizontalAlignment="Center">
                 <Image x:Name="QrImage"
-                       Width="280" Height="280"
+                       Width="260" Height="260"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"/>
             </Border>
+
+            <TextBlock x:Name="ExpiryText"
+                       FontSize="12"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,8,0,0"/>
 
             <Border Background="{StaticResource CardBackgroundBrush}"
                     BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="15"
-                    Margin="0,15,0,0">
+                    Margin="0,12,0,0">
                 <StackPanel>
                     <TextBlock Text="Address" Style="{StaticResource LabelStyle}"/>
                     <TextBlock x:Name="EndpointText"
@@ -65,7 +71,51 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock Text="Anyone who scans this code can download your music folder. Make a new code to unpair all phones."
+            <Border Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="15,10"
+                    Margin="0,10,0,0">
+                <StackPanel>
+                    <TextBlock Text="Paired phones" Style="{StaticResource LabelStyle}"/>
+                    <TextBlock x:Name="NoDevicesText"
+                               Text="None yet"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="13"/>
+                    <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="DeviceList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}"
+                                                       Foreground="{StaticResource TextBrush}"
+                                                       FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Detail}"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       FontSize="11"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1"
+                                                Content="Remove"
+                                                Tag="{Binding Id}"
+                                                Click="OnRemoveDeviceClick"
+                                                Padding="10,4"
+                                                Style="{StaticResource SecondaryButtonStyle}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="The code works once and expires after 5 minutes. Each phone gets its own key; remove a phone to stop it syncing."
                        FontSize="11"
                        Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap"
@@ -78,7 +128,7 @@
                         Style="{StaticResource ModernButtonStyle}"
                         Margin="0,0,10,0"/>
                 <Button x:Name="RegenerateButton"
-                        Content="New pairing code"
+                        Content="New code"
                         Style="{StaticResource SecondaryButtonStyle}"/>
             </StackPanel>
         </StackPanel>

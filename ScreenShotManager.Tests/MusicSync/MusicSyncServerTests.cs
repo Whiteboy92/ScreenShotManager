@@ -27,6 +27,7 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
     private MusicLibraryService library = null!;
     private CertificateProvider certificates = null!;
     private MusicSyncServer server = null!;
+    private DeviceRegistry devices = null!;
     private HttpClient client = null!;
     private string trackId = string.Empty;
     private readonly ManualClock clock = new();
@@ -43,8 +44,10 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
         trackId = library.Current.Tracks.Single().Id;
 
         certificates = new CertificateProvider(Path.Combine(temp.Path, "cert.pfx"));
-        server = new MusicSyncServer(library, reader) { LoopbackOnly = true, Clock = clock, Log = log.Enqueue };
-        await server.StartAsync(0, Token, certificates.GetOrCreate());
+        devices = new DeviceRegistry(Path.Combine(temp.Path, "devices.json"), clock);
+        devices.ImportLegacyToken(Token, "Test phone");
+        server = new MusicSyncServer(library, reader, devices) { LoopbackOnly = true, Clock = clock, Log = log.Enqueue };
+        await server.StartAsync(0, certificates.GetOrCreate());
 
         client = NewPinnedClient(certificates.GetFingerprint());
     }
@@ -224,12 +227,69 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task UpdateToken_revokes_old_token()
+    public async Task Removing_a_device_revokes_its_token()
     {
-        server.UpdateToken("new-token");
+        devices.Remove(devices.Devices.Single().Id);
 
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(Get("/api/manifest"))).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/api/manifest", "new-token"))).StatusCode);
+    }
+
+    private Task<HttpResponseMessage> Pair(string code, string name = "Pixel") =>
+        client.PostAsync("/api/pair", new StringContent(
+            JsonSerializer.Serialize(new { code, deviceName = name }), Encoding.UTF8, "application/json"));
+
+    [Fact]
+    public async Task Pairing_code_buys_a_device_token_once()
+    {
+        var code = devices.IssuePairingCode().Code;
+
+        var response = await Pair(code, "Pixel\u0007 9");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var token = json.RootElement.GetProperty("token").GetString()!;
+
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/api/manifest", token))).StatusCode);
+        Assert.Contains(devices.Devices, d => d.Name == "Pixel 9");
+        Assert.DoesNotContain(token, File.ReadAllText(Path.Combine(temp.Path, "devices.json")), StringComparison.OrdinalIgnoreCase);
+
+        // Spent: a second phone (or a replay) can't reuse it.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Pair(code)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Expired_or_wrong_pairing_codes_are_refused()
+    {
+        var code = devices.IssuePairingCode().Code;
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Pair("nope")).StatusCode);
+
+        clock.Advance(MusicSyncConstants.PairingCodeLifetime);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Pair(code)).StatusCode);
+        Assert.Single(devices.Devices);
+    }
+
+    [Fact]
+    public async Task Wrong_pairing_codes_count_toward_the_lockout()
+    {
+        for (var i = 0; i < MusicSyncConstants.MaxAuthFailures; i++)
+        {
+            await Pair("guess" + i);
+        }
+
+        var code = devices.IssuePairingCode().Code;
+        Assert.Equal((HttpStatusCode)429, (await Pair(code)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Manifest_is_cached_per_revision()
+    {
+        var first = await (await client.SendAsync(Get("/api/manifest"))).Content.ReadAsStringAsync();
+        var second = await (await client.SendAsync(Get("/api/manifest"))).Content.ReadAsStringAsync();
+        Assert.Equal(first, second);
+
+        temp.Write(@"music\other.mp3", Song);
+        await library.RescanAsync();
+        var third = await (await client.SendAsync(Get("/api/manifest"))).Content.ReadAsStringAsync();
+        Assert.NotEqual(first, third);
     }
 
     [Fact]

@@ -21,6 +21,7 @@ public partial class App
     private IMusicSyncServer? musicServer;
     private IMdnsAdvertiser? musicAdvertiser;
     private ICertificateProvider? musicCertificates;
+    private IDeviceRegistry? musicDevices;
     private PairingWindow? pairingWindow;
 
     /// <summary>Settings the server was last (re)started with; used to skip no-op restarts.</summary>
@@ -41,6 +42,8 @@ public partial class App
             musicServer = musicSyncProvider.GetRequiredService<IMusicSyncServer>();
             musicAdvertiser = musicSyncProvider.GetRequiredService<IMdnsAdvertiser>();
             musicCertificates = musicSyncProvider.GetRequiredService<ICertificateProvider>();
+            musicDevices = musicSyncProvider.GetRequiredService<IDeviceRegistry>();
+            MigrateLegacyMusicSyncToken();
 
             ApplyMusicSyncSettings();
         }
@@ -59,11 +62,6 @@ public partial class App
             return;
         }
 
-        if (settings.MusicSyncEnabled)
-        {
-            EnsureMusicSyncToken();
-        }
-
         // Cheap to set every time; no restart needed when only the backup folder changes.
         musicServer.BackupFolder = settings.GetMusicBackupFolder();
 
@@ -74,32 +72,37 @@ public partial class App
         }
 
         appliedMusicSync = desired;
-        var token = settings.MusicSyncToken;
         musicSyncTransition = musicSyncTransition
-            .ContinueWith(_ => RestartMusicSyncAsync(desired.MusicSyncEnabled, desired.MusicFolder, desired.MusicSyncPort, token),
+            .ContinueWith(_ => RestartMusicSyncAsync(desired.MusicSyncEnabled, desired.MusicFolder, desired.MusicSyncPort),
                 TaskScheduler.Default)
             .Unwrap();
     }
 
-    private void EnsureMusicSyncToken()
+    /// <summary>
+    /// The phone paired before per-device tokens keeps working: its shared token becomes one
+    /// device entry (stored hashed) and is removed from config.json.
+    /// </summary>
+    private void MigrateLegacyMusicSyncToken()
     {
-        if (!string.IsNullOrEmpty(settings.MusicSyncToken))
+        if (string.IsNullOrEmpty(settings.MusicSyncToken) || musicDevices == null)
         {
             return;
         }
 
-        settings.MusicSyncToken = PairingTokens.Generate();
+        musicDevices.ImportLegacyToken(settings.MusicSyncToken, "Phone (paired earlier)");
+        settings.MusicSyncToken = string.Empty;
         try
         {
             settingsService?.Save(settings);
+            CaptureLog.Write("[musicsync] moved legacy pairing token into the devices list");
         }
         catch (Exception ex)
         {
-            CaptureLog.Write($"[musicsync] failed to persist token: {ex.Message}");
+            CaptureLog.Write($"[musicsync] failed to clear legacy token: {ex.Message}");
         }
     }
 
-    private async Task RestartMusicSyncAsync(bool enabled, string folder, int port, string token)
+    private async Task RestartMusicSyncAsync(bool enabled, string folder, int port)
     {
         await StopMusicSyncAsync().ConfigureAwait(false);
 
@@ -112,7 +115,7 @@ public partial class App
         {
             var certificate = musicCertificates.GetOrCreate();
             musicLibrary.Start(folder);
-            await musicServer.StartAsync(port, token, certificate).ConfigureAwait(false);
+            await musicServer.StartAsync(port, certificate).ConfigureAwait(false);
             musicAdvertiser?.Start(musicServer.BoundPort, musicCertificates.GetFingerprint());
             CaptureLog.Write($"[musicsync] serving {folder} on port {musicServer.BoundPort}");
         }
@@ -164,7 +167,7 @@ public partial class App
                 return;
             }
 
-            pairingWindow = new PairingWindow(BuildPairingInfo(), RegeneratePairing, () => musicLibrary?.Current);
+            pairingWindow = new PairingWindow(NewPairingInfo, musicDevices!, () => musicLibrary?.Current);
             pairingWindow.Closed += (_, _) => pairingWindow = null;
             pairingWindow.Show();
         }
@@ -174,21 +177,13 @@ public partial class App
         }
     }
 
-    private PairingInfo BuildPairingInfo() => new(
+    /// <summary>Fresh one-time code (replacing any unused one) plus how to reach this PC.</summary>
+    private PairingInfo NewPairingInfo() => new(
         Environment.MachineName,
         LanAddressProvider.GetLanAddresses(),
         musicServer!.BoundPort,
-        settings.MusicSyncToken,
+        musicDevices!.IssuePairingCode(),
         musicCertificates!.GetFingerprint());
-
-    /// <summary>New token: every previously paired phone gets 401 until it scans the new code.</summary>
-    private PairingInfo RegeneratePairing()
-    {
-        settings.MusicSyncToken = PairingTokens.Generate();
-        settingsService?.Save(settings);
-        musicServer?.UpdateToken(settings.MusicSyncToken);
-        return BuildPairingInfo();
-    }
 
     private void CleanupMusicSyncFeature()
     {

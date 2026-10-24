@@ -12,6 +12,12 @@ public static class PairingTokens
     public static string Generate() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(Models.MusicSyncConstants.TokenBytes)).ToLowerInvariant();
 
+    /// <summary>The token in <c>Bearer &lt;token&gt;</c>, or null.</summary>
+    public static string? ExtractBearer(string? authorizationHeader) =>
+        authorizationHeader != null && authorizationHeader.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? authorizationHeader.Substring(BearerPrefix.Length).Trim()
+            : null;
+
     /// <summary>
     /// True when <paramref name="authorizationHeader"/> is <c>Bearer &lt;expected&gt;</c>.
     /// Constant-time so the token can't be recovered byte-by-byte from response timing.

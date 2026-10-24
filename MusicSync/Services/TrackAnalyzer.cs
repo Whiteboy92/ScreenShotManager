@@ -42,24 +42,7 @@ public sealed partial class TrackAnalyzer : ITrackAnalyzer
             return null;
         }
 
-        var args = "-hide_banner -nostats -nostdin " +
-                   $"-i \"{path}\" -map 0:a:0 " +
-                   $"-af \"ebur128=peak=true:framelog=verbose,aresample={SampleRate},aformat=sample_fmts=s16:channel_layouts=mono\" " +
-                   "-f s16le pipe:1";
-
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardErrorEncoding = Encoding.UTF8,
-            },
-        };
+        using var process = new Process { StartInfo = BuildStartInfo(ffmpegPath, path) };
 
         if (!process.Start())
         {
@@ -101,6 +84,37 @@ public sealed partial class TrackAnalyzer : ITrackAnalyzer
         }
 
         return new TrackAnalysis(loudness.Value, peak ?? 0, BuildWaveform(pcm.GetBuffer().AsSpan(0, (int)pcm.Length)));
+    }
+
+    /// <summary>
+    /// Each argument is passed separately (ArgumentList), so .NET does the Windows quoting: a file
+    /// name can never break out of its argument, whatever characters it contains.
+    /// </summary>
+    internal static ProcessStartInfo BuildStartInfo(string ffmpegPath, string path)
+    {
+        var info = new ProcessStartInfo
+        {
+            FileName = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        foreach (var arg in new[]
+                 {
+                     "-hide_banner", "-nostats", "-nostdin",
+                     "-i", path,
+                     "-map", "0:a:0",
+                     "-af", $"ebur128=peak=true:framelog=verbose,aresample={SampleRate},aformat=sample_fmts=s16:channel_layouts=mono",
+                     "-f", "s16le", "pipe:1",
+                 })
+        {
+            info.ArgumentList.Add(arg);
+        }
+
+        return info;
     }
 
     /// <summary>Reads "I: -14.2 LUFS" and the true-peak "Peak: -0.3 dBFS" from ebur128's summary.</summary>

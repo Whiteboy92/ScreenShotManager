@@ -18,6 +18,7 @@ public static class MusicSyncServiceCollectionExtensions
         services.AddSingleton<ITrackAnalyzer, TrackAnalyzer>();
         services.AddSingleton<IMusicLibraryService, MusicLibraryService>();
         services.AddSingleton<ICertificateProvider, CertificateProvider>();
+        services.AddSingleton<IDeviceRegistry, DeviceRegistry>();
         services.AddSingleton<IMusicSyncServer, MusicSyncServer>();
         services.AddSingleton<IMdnsAdvertiser, MdnsAdvertiser>();
         return services;

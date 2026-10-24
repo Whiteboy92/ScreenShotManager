@@ -9,8 +9,10 @@ namespace ScreenShotManager.MusicSync.Services;
 
 /// <summary>
 /// Self-signed ECDSA P-256 certificate persisted at %AppData%\ScreenShotManager\musicsync-cert.pfx.
-/// Valid for 10 years; regenerated only when missing, unreadable or close to expiry (which forces
-/// the phone to re-pair, since its pinned fingerprint changes).
+/// The PFX bytes are encrypted with DPAPI (current Windows user), so a copy of the file can't be
+/// used elsewhere to impersonate this PC to the phone. Older unencrypted files are re-saved
+/// encrypted on first load. Valid for 10 years; regenerated only when missing, unreadable or close
+/// to expiry (which forces the phone to re-pair, since its pinned fingerprint changes).
 /// </summary>
 public sealed class CertificateProvider : ICertificateProvider
 {
@@ -20,6 +22,10 @@ public sealed class CertificateProvider : ICertificateProvider
         "musicsync-cert.pfx");
 
     private static readonly TimeSpan RenewBefore = TimeSpan.FromDays(30);
+
+    /// <summary>Marks a DPAPI-wrapped file; a raw PFX starts with 0x30 (DER SEQUENCE).</summary>
+    private static readonly byte[] ProtectedMagic = "SSMDPAPI1"u8.ToArray();
+    private static readonly byte[] Entropy = "ScreenShotManager.MusicSync.Certificate"u8.ToArray();
 
     private readonly object sync = new();
     private readonly string pfxPath;
@@ -61,9 +67,21 @@ public sealed class CertificateProvider : ICertificateProvider
                 return null;
             }
 
-            var loaded = X509CertificateLoader.LoadPkcs12FromFile(pfxPath, password: null);
+            var stored = File.ReadAllBytes(pfxPath);
+            var isProtected = stored.AsSpan().StartsWith(ProtectedMagic);
+            var pfx = isProtected
+                ? ProtectedData.Unprotect(stored[ProtectedMagic.Length..], Entropy, DataProtectionScope.CurrentUser)
+                : stored;
+
+            var loaded = X509CertificateLoader.LoadPkcs12(pfx, password: null);
             if (loaded.HasPrivateKey && loaded.NotAfter.ToUniversalTime() - DateTime.UtcNow > RenewBefore)
             {
+                if (!isProtected)
+                {
+                    Persist(pfx);
+                    CaptureLog.Write("[musicsync] certificate file now encrypted with DPAPI");
+                }
+
                 return loaded;
             }
 
@@ -95,11 +113,19 @@ public sealed class CertificateProvider : ICertificateProvider
         using var created = request.CreateSelfSigned(now.AddDays(-1), now.AddYears(10));
         var pfx = created.Export(X509ContentType.Pfx);
 
-        FileHelper.EnsureDirectoryExists(pfxPath);
-        File.WriteAllBytes(pfxPath, pfx);
+        Persist(pfx);
         CaptureLog.Write("[musicsync] generated new TLS certificate; phones must re-pair");
 
         // Reload from PFX: SChannel can't use the ephemeral key CreateSelfSigned returns.
         return X509CertificateLoader.LoadPkcs12(pfx, password: null);
+    }
+
+    private void Persist(byte[] pfx)
+    {
+        var sealedPfx = ProtectedData.Protect(pfx, Entropy, DataProtectionScope.CurrentUser);
+        FileHelper.EnsureDirectoryExists(pfxPath);
+        var temp = pfxPath + ".tmp";
+        File.WriteAllBytes(temp, [.. ProtectedMagic, .. sealedPfx]);
+        File.Move(temp, pfxPath, overwrite: true);
     }
 }

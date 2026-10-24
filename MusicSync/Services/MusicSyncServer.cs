@@ -25,6 +25,7 @@ namespace ScreenShotManager.MusicSync.Services;
 /// Kestrel-hosted LAN API. Routes:
 /// <list type="bullet">
 /// <item><c>GET /api/ping</c> — unauthenticated liveness + API version.</item>
+/// <item><c>POST /api/pair</c> — unauthenticated; trades the one-time QR code for a device token.</item>
 /// <item><c>GET /api/manifest</c> — full track list; ETag/If-None-Match, 503 until the first scan finishes.</item>
 /// <item><c>GET /api/tracks/{id}/file</c> — audio bytes with Range support for resumable downloads.</item>
 /// <item><c>GET /api/tracks/{id}/art</c> — cover image, 404 when none.</item>
@@ -40,15 +41,17 @@ public sealed class MusicSyncServer : IMusicSyncServer
 
     private readonly IMusicLibraryService library;
     private readonly ITrackMetadataReader metadataReader;
+    private readonly IDeviceRegistry devices;
     private WebApplication? app;
-    private volatile string token = string.Empty;
+    private volatile CachedManifest? cachedManifest;
     private volatile string? backupFolder;
     private AuthFailureLimiter authFailures = new();
 
-    public MusicSyncServer(IMusicLibraryService library, ITrackMetadataReader metadataReader)
+    public MusicSyncServer(IMusicLibraryService library, ITrackMetadataReader metadataReader, IDeviceRegistry devices)
     {
         this.library = library;
         this.metadataReader = metadataReader;
+        this.devices = devices;
     }
 
     public bool IsRunning => app != null;
@@ -70,14 +73,13 @@ public sealed class MusicSyncServer : IMusicSyncServer
     /// <summary>Clock for the auth lockout; tests advance it.</summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
-    public async Task StartAsync(int port, string accessToken, X509Certificate2 certificate, CancellationToken cancellationToken = default)
+    public async Task StartAsync(int port, X509Certificate2 certificate, CancellationToken cancellationToken = default)
     {
         if (app != null)
         {
             throw new InvalidOperationException("Music sync server is already running.");
         }
 
-        token = accessToken;
         authFailures = new AuthFailureLimiter(Clock);
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
@@ -143,13 +145,13 @@ public sealed class MusicSyncServer : IMusicSyncServer
         }
     }
 
-    public void UpdateToken(string accessToken) => token = accessToken;
-
     private void MapRoutes(WebApplication web)
     {
         web.MapGet("/api/ping", () => Results.Json(
             new { app = "ScreenShotManager", apiVersion = MusicSyncConstants.ApiVersion, name = Environment.MachineName },
             JsonOptions));
+
+        web.MapPost("/api/pair", (Delegate)PairAsync);
 
         var api = web.MapGroup("/api").AddEndpointFilter(async (context, next) =>
             Authorize(context.HttpContext) ?? await next(context));
@@ -203,20 +205,68 @@ public sealed class MusicSyncServer : IMusicSyncServer
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
 
-        if (PairingTokens.IsAuthorized(http.Request.Headers.Authorization.ToString(), token))
+        if (devices.Authenticate(PairingTokens.ExtractBearer(http.Request.Headers.Authorization.ToString())) != null)
         {
             authFailures.RecordSuccess(remote);
             return null;
         }
 
-        Log($"[musicsync] wrong or missing token from {remote} for {http.Request.Method} {http.Request.Path}");
-        if (authFailures.RecordFailure(remote))
-        {
-            Log($"[musicsync] locked out {remote} for {MusicSyncConstants.AuthLockout.TotalMinutes:0} min after {MusicSyncConstants.MaxAuthFailures} wrong tokens");
-        }
-
+        RecordAuthFailure(remote, $"wrong or missing token for {http.Request.Method} {http.Request.Path}");
         return Results.Unauthorized();
     }
+
+    private void RecordAuthFailure(IPAddress remote, string what)
+    {
+        Log($"[musicsync] {what} from {remote}");
+        if (authFailures.RecordFailure(remote))
+        {
+            Log($"[musicsync] locked out {remote} for {MusicSyncConstants.AuthLockout.TotalMinutes:0} min after {MusicSyncConstants.MaxAuthFailures} failed attempts");
+        }
+    }
+
+    /// <summary>
+    /// <c>{"code": "...", "deviceName": "Pixel 9"}</c> → <c>{"token": "..."}</c>. Wrong codes count
+    /// toward the same lockout as wrong tokens, so a 128-bit code that lives 5 minutes can't be guessed.
+    /// </summary>
+    private async Task<IResult> PairAsync(HttpContext http)
+    {
+        var remote = http.Connection.RemoteIpAddress ?? IPAddress.None;
+        if (remote.IsIPv4MappedToIPv6)
+        {
+            remote = remote.MapToIPv4();
+        }
+
+        if (authFailures.LockedFor(remote) is { } left)
+        {
+            http.Response.Headers.RetryAfter = ((int)Math.Ceiling(left.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
+
+        PairRequest? request;
+        try
+        {
+            request = await JsonSerializer.DeserializeAsync<PairRequest>(http.Request.Body, JsonOptions, http.RequestAborted).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            request = null;
+        }
+
+        var token = request == null ? null : devices.Redeem(request.Code, request.DeviceName ?? string.Empty);
+        if (token == null)
+        {
+            RecordAuthFailure(remote, "wrong, used or expired pairing code");
+            return Results.Unauthorized();
+        }
+
+        Log($"[musicsync] paired new device \"{DeviceRegistry.CleanName(request!.DeviceName)}\" from {remote}");
+        return Results.Json(new { token, apiVersion = MusicSyncConstants.ApiVersion }, JsonOptions);
+    }
+
+    private sealed record PairRequest(string? Code, string? DeviceName);
+
+    /// <summary>The manifest serialized once per library revision (it only changes on rescans).</summary>
+    private sealed record CachedManifest(string Revision, byte[] Json);
 
     /// <summary>
     /// Stores the phone's settings/playlists JSON. Must parse as JSON; written atomically, and the
@@ -292,7 +342,14 @@ public sealed class MusicSyncServer : IMusicSyncServer
 
         http.Response.Headers.ETag = etag;
         http.Response.Headers.CacheControl = "no-cache";
-        return Results.Json(manifest, JsonOptions);
+        var cached = cachedManifest;
+        if (cached?.Revision != manifest.Revision)
+        {
+            cached = new CachedManifest(manifest.Revision, JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions));
+            cachedManifest = cached;
+        }
+
+        return Results.Bytes(cached.Json, "application/json; charset=utf-8");
     }
 
     private IResult GetTrackFile(string id)

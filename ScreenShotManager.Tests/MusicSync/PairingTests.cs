@@ -41,7 +41,7 @@ public class PairingTests
     [Fact]
     public void Pairing_uri_escapes_every_field()
     {
-        var info = new PairingInfo("My PC & Co", new[] { "192.168.1.5", "10.0.0.2" }, 47821, "tok+en", "ABCD");
+        var info = new PairingInfo("My PC & Co", new[] { "192.168.1.5", "10.0.0.2" }, 47821, new PairingCode("co+de", DateTimeOffset.UnixEpoch), "ABCD");
 
         var uri = new Uri(info.ToUri());
         var query = uri.Query.TrimStart('?').Split('&')
@@ -50,18 +50,19 @@ public class PairingTests
 
         Assert.Equal("musicsync", uri.Scheme);
         Assert.Equal("pair", uri.Host);
-        Assert.Equal("1", query["v"]);
+        Assert.Equal("2", query["v"]);
         Assert.Equal("My PC & Co", query["name"]);
         Assert.Equal("192.168.1.5,10.0.0.2", query["hosts"]);
         Assert.Equal("47821", query["port"]);
-        Assert.Equal("tok+en", query["token"]);
+        Assert.Equal("co+de", query["code"]);
+        Assert.False(query.ContainsKey("token"));
         Assert.Equal("ABCD", query["fp"]);
     }
 
     [Fact]
     public void DisplayEndpoints_lists_host_port_pairs()
     {
-        var info = new PairingInfo("pc", new[] { "192.168.1.5", "10.0.0.2" }, 47821, "t", "f");
+        var info = new PairingInfo("pc", new[] { "192.168.1.5", "10.0.0.2" }, 47821, new PairingCode("c0de", DateTimeOffset.UnixEpoch), "f");
         Assert.Equal("192.168.1.5:47821, 10.0.0.2:47821", info.DisplayEndpoints);
         Assert.Equal("(no LAN address found)", (info with { Hosts = Array.Empty<string>() }).DisplayEndpoints);
     }
