@@ -36,4 +36,14 @@ public class GeometryHelperTests
         Assert.True(GeometryHelper.IsValidSelection(new Rect(0, 0, 5, 5), minSize: 5));
         Assert.False(GeometryHelper.IsValidSelection(new Rect(0, 0, 4, 4), minSize: 5));
     }
+
+    [Fact]
+    public void GetVirtualScreenBounds_matches_system_parameters()
+    {
+        var bounds = GeometryHelper.GetVirtualScreenBounds();
+        Assert.Equal(SystemParameters.VirtualScreenLeft, bounds.X);
+        Assert.Equal(SystemParameters.VirtualScreenTop, bounds.Y);
+        Assert.Equal(SystemParameters.VirtualScreenWidth, bounds.Width);
+        Assert.Equal(SystemParameters.VirtualScreenHeight, bounds.Height);
+    }
 }

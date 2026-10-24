@@ -18,6 +18,18 @@ public sealed class DownscaleIpcClient : IDownscaleIpcClient
 {
     private const int ConnectTimeoutMs = 2000;
 
+    private readonly string pipeName;
+
+    public DownscaleIpcClient()
+        : this(DownscaleConstants.PipeName)
+    {
+    }
+
+    internal DownscaleIpcClient(string pipeName)
+    {
+        this.pipeName = pipeName;
+    }
+
     public async Task<bool> TrySendAsync(
         IEnumerable<string> paths, CancellationToken cancellationToken = default)
     {
@@ -25,7 +37,7 @@ public sealed class DownscaleIpcClient : IDownscaleIpcClient
         {
             using var client = new NamedPipeClientStream(
                 ".",
-                DownscaleConstants.PipeName,
+                pipeName,
                 PipeDirection.Out,
                 PipeOptions.Asynchronous);
 

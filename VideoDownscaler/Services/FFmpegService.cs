@@ -84,7 +84,7 @@ public sealed class FFmpegService : IFFmpegService
     }
 
     /// <summary>Parses FFmpeg <c>-progress</c> "out_time=HH:MM:SS.us" lines into a 0..1 fraction.</summary>
-    private static void ReportProgress(string line, double totalSeconds, IProgress<double> progress)
+    internal static void ReportProgress(string line, double totalSeconds, IProgress<double> progress)
     {
         const string key = "out_time=";
         if (!line.StartsWith(key, StringComparison.Ordinal))
@@ -145,7 +145,7 @@ public sealed class FFmpegService : IFFmpegService
         return SoftwareEncoder;
     }
 
-    private static string BuildArguments(
+    internal static string BuildArguments(
         string encoder, string inputPath, string outputPath, VideoResolution target)
     {
         var tw = target.Width.ToString(CultureInfo.InvariantCulture);
@@ -190,7 +190,7 @@ public sealed class FFmpegService : IFFmpegService
         }
     }
 
-    private static string Tail(string text, int maxLines = 6)
+    internal static string Tail(string text, int maxLines = 6)
     {
         var lines = text.TrimEnd().Split('\n');
         var start = Math.Max(0, lines.Length - maxLines);

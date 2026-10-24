@@ -17,8 +17,19 @@ namespace ScreenShotManager.VideoDownscaler.Services;
 public sealed class DownscaleIpcServer : IDownscaleIpcServer
 {
     private readonly CancellationTokenSource cts = new();
+    private readonly string pipeName;
     private Task? listenLoop;
     private int started;
+
+    public DownscaleIpcServer()
+        : this(DownscaleConstants.PipeName)
+    {
+    }
+
+    internal DownscaleIpcServer(string pipeName)
+    {
+        this.pipeName = pipeName;
+    }
 
     public event EventHandler<string>? PathReceived;
 
@@ -30,7 +41,7 @@ public sealed class DownscaleIpcServer : IDownscaleIpcServer
         }
 
         listenLoop = Task.Run(() => ListenAsync(cts.Token));
-        CaptureLog.Write($"[ipc] server listening on {DownscaleConstants.PipeName}");
+        CaptureLog.Write($"[ipc] server listening on {pipeName}");
     }
 
     private async Task ListenAsync(CancellationToken token)
@@ -40,7 +51,7 @@ public sealed class DownscaleIpcServer : IDownscaleIpcServer
             try
             {
                 using var server = new NamedPipeServerStream(
-                    DownscaleConstants.PipeName,
+                    pipeName,
                     PipeDirection.In,
                     NamedPipeServerStream.MaxAllowedServerInstances,
                     PipeTransmissionMode.Byte,

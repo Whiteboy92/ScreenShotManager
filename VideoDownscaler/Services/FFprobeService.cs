@@ -61,7 +61,7 @@ public sealed class FFprobeService : IFFprobeService
         return ParseDuration(result.StdOut);
     }
 
-    private static TimeSpan ParseDuration(string json)
+    internal static TimeSpan ParseDuration(string json)
     {
         try
         {
@@ -83,7 +83,7 @@ public sealed class FFprobeService : IFFprobeService
         return TimeSpan.Zero;
     }
 
-    private static VideoResolution Parse(string json, string filePath)
+    internal static VideoResolution Parse(string json, string filePath)
     {
         try
         {

@@ -17,19 +17,31 @@ public class SettingsService : ISettingsService
     private const string StartupRegistryKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "ScreenShotManager";
     
-    private static readonly string ConfigPath = Path.Combine(
+    private static readonly string DefaultConfigPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "ScreenShotManager",
         "config.json"
     );
 
+    private readonly string configPath;
+
+    public SettingsService()
+        : this(DefaultConfigPath)
+    {
+    }
+
+    internal SettingsService(string configPath)
+    {
+        this.configPath = configPath;
+    }
+
     public AppSettings Load()
     {
         try
         {
-            if (File.Exists(ConfigPath))
+            if (File.Exists(configPath))
             {
-                var json = File.ReadAllText(ConfigPath);
+                var json = File.ReadAllText(configPath);
                 return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             }
         }
@@ -43,14 +55,14 @@ public class SettingsService : ISettingsService
     {
         try
         {
-            FileHelper.EnsureDirectoryExists(ConfigPath);
+            FileHelper.EnsureDirectoryExists(configPath);
 
             var options = new JsonSerializerOptions
             {
                 WriteIndented = true,
             };
             var json = JsonSerializer.Serialize(settings, options);
-            File.WriteAllText(ConfigPath, json);
+            File.WriteAllText(configPath, json);
         }
         catch (Exception ex)
         {

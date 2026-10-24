@@ -412,7 +412,7 @@ internal sealed class HdrScreenCapturer : IDisposable
     }
 
     /// <summary>Native 8-bit BGRA: straight row copy (SDR fast path, no tone-map).</summary>
-    private static void DecodeBgra8(IntPtr src, int rowPitch, int width, int height, byte[] dst)
+    internal static void DecodeBgra8(IntPtr src, int rowPitch, int width, int height, byte[] dst)
     {
         int dstStride = width * 4;
         long srcAddr = src.ToInt64();
@@ -515,7 +515,7 @@ internal sealed class HdrScreenCapturer : IDisposable
     /// (every other row and column) is statistically identical for region-sized HDR highlights
     /// and quarters the work versus two full-frame passes.
     /// </summary>
-    private static (float max, float whitePoint) AnalyzeFp16(long srcAddr, int rowPitch, int width, int height)
+    internal static (float max, float whitePoint) AnalyzeFp16(long srcAddr, int rowPitch, int width, int height)
     {
         const int Bins = 256;
         const float MinLog = -4f;
@@ -648,7 +648,7 @@ internal sealed class HdrScreenCapturer : IDisposable
     }
 
     /// <summary>Encodes a linear [0,1] channel to an 8-bit sRGB value.</summary>
-    private static byte LinearToSrgb(float c)
+    internal static byte LinearToSrgb(float c)
     {
         if (!(c > 0f)) return 0; // also catches NaN
         if (c >= 1f) return 255;
