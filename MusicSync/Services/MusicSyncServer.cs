@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
 using ScreenShotManager.MusicSync.Models;
 using ScreenShotManager.MusicSync.Services.Interfaces;
+using ScreenShotManager.Shared.Helpers;
 
 namespace ScreenShotManager.MusicSync.Services;
 
@@ -42,6 +43,7 @@ public sealed class MusicSyncServer : IMusicSyncServer
     private WebApplication? app;
     private volatile string token = string.Empty;
     private volatile string? backupFolder;
+    private AuthFailureLimiter authFailures = new();
 
     public MusicSyncServer(IMusicLibraryService library, ITrackMetadataReader metadataReader)
     {
@@ -62,6 +64,12 @@ public sealed class MusicSyncServer : IMusicSyncServer
     /// <summary>Tests bind to loopback so Windows Firewall doesn't prompt for testhost.exe.</summary>
     internal bool LoopbackOnly { get; init; }
 
+    /// <summary>Security events (rejected connections, lockouts). Tests capture them.</summary>
+    internal Action<string> Log { get; init; } = CaptureLog.Write;
+
+    /// <summary>Clock for the auth lockout; tests advance it.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
     public async Task StartAsync(int port, string accessToken, X509Certificate2 certificate, CancellationToken cancellationToken = default)
     {
         if (app != null)
@@ -70,6 +78,7 @@ public sealed class MusicSyncServer : IMusicSyncServer
         }
 
         token = accessToken;
+        authFailures = new AuthFailureLimiter(Clock);
 
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
@@ -81,16 +90,17 @@ public sealed class MusicSyncServer : IMusicSyncServer
         builder.WebHost.ConfigureKestrel(kestrel =>
         {
             kestrel.AddServerHeader = false;
+            kestrel.Limits.MaxConcurrentConnections = MusicSyncConstants.MaxConnections;
             // Only PUT /api/backup has a body.
             kestrel.Limits.MaxRequestBodySize = MusicSyncConstants.MaxBackupBytes;
             if (LoopbackOnly)
             {
                 // ListenLocalhost can't bind port 0, so use the IPv4 loopback explicitly.
-                kestrel.Listen(IPAddress.Loopback, port, listen => listen.UseHttps(certificate));
+                kestrel.Listen(IPAddress.Loopback, port, listen => ConfigureListener(listen, certificate));
             }
             else
             {
-                kestrel.ListenAnyIP(port, listen => listen.UseHttps(certificate));
+                kestrel.ListenAnyIP(port, listen => ConfigureListener(listen, certificate));
             }
         });
 
@@ -142,9 +152,7 @@ public sealed class MusicSyncServer : IMusicSyncServer
             JsonOptions));
 
         var api = web.MapGroup("/api").AddEndpointFilter(async (context, next) =>
-            PairingTokens.IsAuthorized(context.HttpContext.Request.Headers.Authorization.ToString(), token)
-                ? await next(context)
-                : Results.Unauthorized());
+            Authorize(context.HttpContext) ?? await next(context));
 
         api.MapGet("/manifest", GetManifest);
         api.MapGet("/tracks/{id}/file", GetTrackFile);
@@ -155,6 +163,59 @@ public sealed class MusicSyncServer : IMusicSyncServer
         api.MapGet("/tracks/{id}/waveform", GetWaveform);
         api.MapGet("/tracks/{id}/lyrics", GetLyrics);
         api.MapGet("/backup", GetBackup);
+    }
+
+    /// <summary>
+    /// Connection middleware runs before the TLS handshake, so off-network devices learn nothing
+    /// (not even the certificate). Covers the PC being on a café/hotel network or reachable over
+    /// public IPv6: only loopback and private addresses on both ends get through.
+    /// </summary>
+    private void ConfigureListener(Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions listen, X509Certificate2 certificate)
+    {
+        listen.Use(next => async connection =>
+        {
+            var remote = (connection.RemoteEndPoint as IPEndPoint)?.Address;
+            var local = (connection.LocalEndPoint as IPEndPoint)?.Address;
+            if (!NetworkGuard.IsLocalNetwork(remote) || !NetworkGuard.IsLocalNetwork(local))
+            {
+                Log($"[musicsync] rejected connection from {connection.RemoteEndPoint} to {connection.LocalEndPoint} (not a local network)");
+                connection.Abort();
+                return;
+            }
+
+            await next(connection).ConfigureAwait(false);
+        });
+        listen.UseHttps(certificate);
+    }
+
+    /// <summary>Token check with per-address lockout. Null means authorized.</summary>
+    private IResult? Authorize(HttpContext http)
+    {
+        var remote = http.Connection.RemoteIpAddress ?? IPAddress.None;
+        if (remote.IsIPv4MappedToIPv6)
+        {
+            remote = remote.MapToIPv4();
+        }
+
+        if (authFailures.LockedFor(remote) is { } left)
+        {
+            http.Response.Headers.RetryAfter = ((int)Math.Ceiling(left.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+        }
+
+        if (PairingTokens.IsAuthorized(http.Request.Headers.Authorization.ToString(), token))
+        {
+            authFailures.RecordSuccess(remote);
+            return null;
+        }
+
+        Log($"[musicsync] wrong or missing token from {remote} for {http.Request.Method} {http.Request.Path}");
+        if (authFailures.RecordFailure(remote))
+        {
+            Log($"[musicsync] locked out {remote} for {MusicSyncConstants.AuthLockout.TotalMinutes:0} min after {MusicSyncConstants.MaxAuthFailures} wrong tokens");
+        }
+
+        return Results.Unauthorized();
     }
 
     /// <summary>

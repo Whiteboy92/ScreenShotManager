@@ -29,6 +29,8 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
     private MusicSyncServer server = null!;
     private HttpClient client = null!;
     private string trackId = string.Empty;
+    private readonly ManualClock clock = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<string> log = new();
 
     public async Task InitializeAsync()
     {
@@ -41,7 +43,7 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
         trackId = library.Current.Tracks.Single().Id;
 
         certificates = new CertificateProvider(Path.Combine(temp.Path, "cert.pfx"));
-        server = new MusicSyncServer(library, reader) { LoopbackOnly = true };
+        server = new MusicSyncServer(library, reader) { LoopbackOnly = true, Clock = clock, Log = log.Enqueue };
         await server.StartAsync(0, Token, certificates.GetOrCreate());
 
         client = NewPinnedClient(certificates.GetFingerprint());
@@ -186,6 +188,39 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("image/jpeg", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal(new byte[] { 0xFF, 0xD8, 0xFF }, await response.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
+    public async Task Repeated_wrong_tokens_lock_the_address_out_then_expire()
+    {
+        for (var i = 0; i < MusicSyncConstants.MaxAuthFailures; i++)
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(Get("/api/manifest", "wrong"))).StatusCode);
+        }
+
+        // Locked: even the right token is refused until the lockout ends, and the PC log says why.
+        var locked = await client.SendAsync(Get("/api/manifest"));
+        Assert.Equal((HttpStatusCode)429, locked.StatusCode);
+        Assert.NotNull(locked.Headers.RetryAfter);
+        Assert.Contains(log, line => line.Contains("locked out", StringComparison.Ordinal));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/api/ping", token: null))).StatusCode);
+
+        clock.Advance(MusicSyncConstants.AuthLockout + TimeSpan.FromSeconds(1));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/api/manifest"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Correct_token_resets_the_failure_count()
+    {
+        for (var round = 0; round < 3; round++)
+        {
+            for (var i = 0; i < MusicSyncConstants.MaxAuthFailures - 1; i++)
+            {
+                await client.SendAsync(Get("/api/manifest", "wrong"));
+            }
+
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(Get("/api/manifest"))).StatusCode);
+        }
     }
 
     [Fact]

@@ -35,6 +35,16 @@ public static class MusicSyncConstants
     /// <summary>Bump to make every cached song's tags be re-read (e.g. a new tag field), without re-hashing.</summary>
     public const int MetadataVersion = 2;
 
+    /// <summary>Simultaneous connections Kestrel accepts (the phone uses a handful; Android Auto adds art requests).</summary>
+    public const int MaxConnections = 32;
+
+    /// <summary>Wrong tokens from one address within <see cref="AuthFailureWindow"/> before it is locked out.</summary>
+    public const int MaxAuthFailures = 5;
+
+    public static readonly TimeSpan AuthFailureWindow = TimeSpan.FromMinutes(1);
+
+    public static readonly TimeSpan AuthLockout = TimeSpan.FromMinutes(5);
+
     /// <summary>Quiet period after the last file-system change before the library is rescanned.</summary>
     public static readonly TimeSpan RescanDebounce = TimeSpan.FromSeconds(3);
 

@@ -16,7 +16,10 @@ public interface IMusicSyncServer : IAsyncDisposable
     /// <summary>Actual listening port (differs from the requested one only when 0 was requested).</summary>
     int BoundPort { get; }
 
-    /// <summary>Binds all interfaces on <paramref name="port"/>. Throws if the port is taken.</summary>
+    /// <summary>
+    /// Binds all interfaces on <paramref name="port"/>, but serves only loopback/private-network
+    /// devices; wrong tokens lock an address out for a while. Throws if the port is taken.
+    /// </summary>
     Task StartAsync(int port, string token, X509Certificate2 certificate, CancellationToken cancellationToken = default);
 
     Task StopAsync();
