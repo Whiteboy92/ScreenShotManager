@@ -148,7 +148,8 @@ public sealed class MusicSyncServer : IMusicSyncServer
     private void MapRoutes(WebApplication web)
     {
         web.MapGet("/api/ping", () => Results.Json(
-            new { app = "ScreenShotManager", apiVersion = MusicSyncConstants.ApiVersion, name = Environment.MachineName },
+            // No PC name here: anyone on the network can call this, and the phone already knows it from pairing.
+            new { app = "ScreenShotManager", apiVersion = MusicSyncConstants.ApiVersion },
             JsonOptions));
 
         web.MapPost("/api/pair", (Delegate)PairAsync);
