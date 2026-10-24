@@ -23,6 +23,12 @@ public sealed record TrackInfo
 
     public required string Sha256 { get; init; }
 
+    /// <summary>
+    /// Hash of the audio alone (MP3 tags stripped); null for other formats. Equal audio hashes mean
+    /// a tag-only edit, which the phone applies from the manifest without downloading the file.
+    /// </summary>
+    public string? AudioSha256 { get; init; }
+
     public required string ContentType { get; init; }
 
     public string? Title { get; init; }

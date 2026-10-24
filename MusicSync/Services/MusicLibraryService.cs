@@ -184,6 +184,7 @@ public sealed class MusicLibraryService : IMusicLibraryService
         {
             // Analysis and lyrics count too, so the phone picks them up without re-downloading.
             builder.Append(track.Id).Append(':').Append(track.Sha256)
+                .Append(':').Append(track.AudioSha256)
                 .Append(':').Append(track.GainDb?.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 .Append(':').Append(track.LyricsVersion)
                 .Append('\n');
@@ -236,6 +237,7 @@ public sealed class MusicLibraryService : IMusicLibraryService
                     AddedUtc = new DateTimeOffset(info.CreationTimeUtc, TimeSpan.Zero),
                     ModifiedUtc = new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero),
                     Sha256 = entry.Sha256,
+                    AudioSha256 = entry.AudioSha256,
                     ContentType = MusicSyncConstants.GetContentType(path),
                     Title = entry.Metadata.Title ?? Path.GetFileNameWithoutExtension(path),
                     Artist = entry.Metadata.Artist,
@@ -369,30 +371,42 @@ public sealed class MusicLibraryService : IMusicLibraryService
                 return cached;
             }
 
-            // Tag reader learned something new (e.g. lyrics): re-read tags, keep hash and analysis.
+            // Tag reader learned something new (e.g. lyrics): re-read tags, keep analysis. Entries
+            // from before audio hashing get it now (one extra read per song, once).
             var upgraded = cached with
             {
                 Metadata = metadataReader.Read(info.FullName),
                 MetadataVersion = MusicSyncConstants.MetadataVersion,
+                AudioSha256 = cached.AudioSha256 ?? Hash(info).AudioSha256,
             };
             cache.Set(info.FullName, upgraded);
             return upgraded;
         }
 
-        string sha;
-        // FileShare.Read fails while a writer still holds the file, which is exactly the signal we want.
-        using (var stream = new FileStream(info.FullName, FileMode.Open, FileAccess.Read, FileShare.Read,
-                   bufferSize: 1024 * 1024, FileOptions.SequentialScan))
-        {
-            sha = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        }
+        var (sha, audioSha) = Hash(info);
+
+        // A tag-only edit leaves the audio as it was: keep the loudness/waveform instead of re-running ffmpeg.
+        var keptAnalysis = audioSha != null && cache.TryGetPrevious(info.FullName, out var previous)
+                                            && previous.AudioSha256 == audioSha
+            ? previous.Analysis
+            : null;
 
         var entry = new CachedTrack(info.Length, info.LastWriteTimeUtc.Ticks, sha, metadataReader.Read(info.FullName))
         {
             MetadataVersion = MusicSyncConstants.MetadataVersion,
+            AudioSha256 = audioSha,
+            Analysis = keptAnalysis,
         };
         cache.Set(info.FullName, entry);
         return entry;
+    }
+
+    private static (string Sha256, string? AudioSha256) Hash(FileInfo info)
+    {
+        // FileShare.Read fails while a writer still holds the file, which is exactly the signal we want.
+        using var stream = new FileStream(info.FullName, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 1024 * 1024, FileOptions.SequentialScan);
+        return FileHashes.Compute(stream);
     }
 
     private void OnFolderChanged(object sender, FileSystemEventArgs e) => ScheduleRescan();

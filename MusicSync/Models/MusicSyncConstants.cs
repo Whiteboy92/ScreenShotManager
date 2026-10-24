@@ -42,7 +42,7 @@ public static class MusicSyncConstants
     public const int WaveformPoints = 300;
 
     /// <summary>Bump to make every cached song's tags be re-read (e.g. a new tag field), without re-hashing.</summary>
-    public const int MetadataVersion = 2;
+    public const int MetadataVersion = 3;
 
     /// <summary>Simultaneous connections Kestrel accepts (the phone uses a handful; Android Auto adds art requests).</summary>
     public const int MaxConnections = 32;

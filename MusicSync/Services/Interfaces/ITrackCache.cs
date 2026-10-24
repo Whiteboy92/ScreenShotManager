@@ -15,6 +15,13 @@ public interface ITrackCache
 
     void Set(string fullPath, CachedTrack entry);
 
+    /// <summary>Last entry for this path even if the file changed since (to keep results that still apply).</summary>
+    bool TryGetPrevious(string fullPath, [NotNullWhen(true)] out CachedTrack? entry)
+    {
+        entry = null;
+        return false;
+    }
+
     /// <summary>Drops entries for files no longer in the library.</summary>
     void Retain(IReadOnlyCollection<string> livePaths);
 
@@ -29,6 +36,9 @@ public sealed record CachedTrack(
 {
     /// <summary>Filled in later by the background analyzer; null until then.</summary>
     public TrackAnalysis? Analysis { get; init; }
+
+    /// <summary>SHA-256 of the audio without its tags (MP3 only, else null); survives tag edits.</summary>
+    public string? AudioSha256 { get; init; }
 
     /// <summary>Tag-reader version that produced <see cref="Metadata"/> (see MusicSyncConstants.MetadataVersion).</summary>
     public int MetadataVersion { get; init; }

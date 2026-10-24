@@ -52,6 +52,14 @@ public sealed class TrackCache : ITrackCache
         return false;
     }
 
+    public bool TryGetPrevious(string fullPath, [NotNullWhen(true)] out CachedTrack? entry)
+    {
+        lock (sync)
+        {
+            return Entries.TryGetValue(fullPath, out entry);
+        }
+    }
+
     public void Set(string fullPath, CachedTrack entry)
     {
         lock (sync)
