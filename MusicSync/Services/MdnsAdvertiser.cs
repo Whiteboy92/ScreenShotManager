@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Net;
 using Makaretu.Dns;
 using ScreenShotManager.MusicSync.Models;
 using ScreenShotManager.MusicSync.Services.Interfaces;
@@ -21,7 +23,14 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
 
         try
         {
-            profile = new ServiceProfile(Environment.MachineName, MusicSyncConstants.MdnsServiceType, (ushort)port);
+            // Only real LAN addresses: by default every adapter is announced, including Hyper-V/WSL
+            // ones (e.g. 172.20.x.x) that the phone can't reach.
+            var addresses = LanAddressProvider.GetLanAddresses().Select(IPAddress.Parse).ToList();
+            profile = new ServiceProfile(
+                Environment.MachineName,
+                MusicSyncConstants.MdnsServiceType,
+                (ushort)port,
+                addresses.Count > 0 ? addresses : null);
             profile.AddProperty("api", MusicSyncConstants.ApiVersion.ToString());
             profile.AddProperty("fp", certificateFingerprint);
 
