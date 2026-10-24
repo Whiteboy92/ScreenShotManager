@@ -22,6 +22,8 @@ public sealed class MusicLibraryService : IMusicLibraryService
 {
     private readonly ITrackMetadataReader metadataReader;
     private readonly ITrackCache cache;
+    private readonly ITrackAnalyzer? analyzer;
+    private int analyzing;
     private readonly TimeSpan debounce;
     private readonly SemaphoreSlim scanGate = new(1, 1);
     private readonly Timer rescanTimer;
@@ -35,16 +37,21 @@ public sealed class MusicLibraryService : IMusicLibraryService
 
     public event EventHandler<LibraryManifest>? ManifestChanged;
 
-    public MusicLibraryService(ITrackMetadataReader metadataReader, ITrackCache cache)
-        : this(metadataReader, cache, MusicSyncConstants.RescanDebounce)
+    public MusicLibraryService(ITrackMetadataReader metadataReader, ITrackCache cache, ITrackAnalyzer analyzer)
+        : this(metadataReader, cache, MusicSyncConstants.RescanDebounce, analyzer)
     {
     }
 
-    internal MusicLibraryService(ITrackMetadataReader metadataReader, ITrackCache cache, TimeSpan debounce)
+    internal MusicLibraryService(
+        ITrackMetadataReader metadataReader,
+        ITrackCache cache,
+        TimeSpan debounce,
+        ITrackAnalyzer? analyzer = null)
     {
         this.metadataReader = metadataReader;
         this.cache = cache;
         this.debounce = debounce;
+        this.analyzer = analyzer;
         rescanTimer = new Timer(_ => _ = RescanSafeAsync(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -150,6 +157,8 @@ public sealed class MusicLibraryService : IMusicLibraryService
                 CaptureLog.Write($"[musicsync] library revision {manifest.Revision}: {tracks.Count} track(s)");
                 ManifestChanged?.Invoke(this, manifest);
             }
+
+            StartAnalysisIfNeeded(tracks);
         }
         finally
         {
@@ -173,7 +182,11 @@ public sealed class MusicLibraryService : IMusicLibraryService
         var builder = new StringBuilder();
         foreach (var track in tracks.OrderBy(t => t.Id, StringComparer.Ordinal))
         {
-            builder.Append(track.Id).Append(':').Append(track.Sha256).Append('\n');
+            // Analysis and lyrics count too, so the phone picks them up without re-downloading.
+            builder.Append(track.Id).Append(':').Append(track.Sha256)
+                .Append(':').Append(track.GainDb?.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Append(':').Append(track.LyricsVersion)
+                .Append('\n');
         }
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()));
@@ -214,6 +227,7 @@ public sealed class MusicLibraryService : IMusicLibraryService
                 var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
 
                 livePaths.Add(path);
+                var analysis = entry.Analysis;
                 tracks.Add(new TrackInfo
                 {
                     Id = ComputeTrackId(relative),
@@ -229,6 +243,11 @@ public sealed class MusicLibraryService : IMusicLibraryService
                     TrackNumber = entry.Metadata.TrackNumber,
                     DurationMs = entry.Metadata.DurationMs,
                     HasArt = entry.Metadata.HasArt,
+                    GainDb = analysis?.GainDb,
+                    PeakDb = analysis?.PeakDb,
+                    HasWaveform = analysis != null,
+                    Waveform = analysis?.Waveform,
+                    LyricsVersion = LyricsVersionFor(path, entry),
                     FullPath = path,
                 });
             }
@@ -244,14 +263,120 @@ public sealed class MusicLibraryService : IMusicLibraryService
         }
 
         cache.Retain(livePaths);
-        return (tracks, hadLockedFiles);
+        return (WithAlbumGain(tracks), hadLockedFiles);
+    }
+
+    /// <summary>A sibling .lrc wins over tag lyrics; its size+time make the version change on edits.</summary>
+    private static string? LyricsVersionFor(string path, CachedTrack entry)
+    {
+        var lrc = new FileInfo(TrackMetadataReader.LrcPathFor(path));
+        if (lrc.Exists)
+        {
+            return $"lrc-{lrc.Length}-{lrc.LastWriteTimeUtc.Ticks}";
+        }
+
+        return entry.Metadata.HasEmbeddedLyrics ? $"tag-{entry.Sha256[..12]}" : null;
+    }
+
+    private static IReadOnlyList<TrackInfo> WithAlbumGain(List<TrackInfo> tracks)
+    {
+        var albumGains = tracks
+            .Where(t => !string.IsNullOrWhiteSpace(t.Album) && t.GainDb != null && t.DurationMs != null)
+            .GroupBy(t => t.Album!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => TrackAnalysis.AlbumGainDb(g.Select(t => (TrackAnalysis.ReferenceLufs - t.GainDb!.Value, t.DurationMs!.Value))),
+                StringComparer.OrdinalIgnoreCase);
+
+        return tracks
+            .Select(t => t.Album != null && albumGains.TryGetValue(t.Album, out var gain) ? t with { AlbumGainDb = gain } : t)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Analyses songs that don't have loudness/waveform yet, two at a time at low priority, and
+    /// republishes the manifest every 25 songs so the phone gets results as they come in.
+    /// </summary>
+    private void StartAnalysisIfNeeded(IReadOnlyList<TrackInfo> tracks)
+    {
+        if (analyzer is not { IsAvailable: true } || tracks.All(t => t.HasWaveform))
+        {
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref analyzing, 1, 0) != 0)
+        {
+            return;
+        }
+
+        var token = lifetime?.Token ?? CancellationToken.None;
+        var todo = tracks.Where(t => !t.HasWaveform).Select(t => t.FullPath).ToList();
+        _ = Task.Run(async () =>
+        {
+            var done = 0;
+            try
+            {
+                await Parallel.ForEachAsync(
+                    todo,
+                    new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = token },
+                    async (path, ct) =>
+                    {
+                        var info = new FileInfo(path);
+                        if (!info.Exists || !cache.TryGet(path, info.Length, info.LastWriteTimeUtc, out var entry))
+                        {
+                            return;
+                        }
+
+                        var analysis = await analyzer.AnalyzeAsync(path, ct).ConfigureAwait(false)
+                                       // Undecodable/silent: store an empty result so we don't retry forever.
+                                       ?? new TrackAnalysis(TrackAnalysis.ReferenceLufs, 0, new byte[MusicSyncConstants.WaveformPoints]);
+                        cache.Set(path, entry with { Analysis = analysis });
+
+                        if (Interlocked.Increment(ref done) % 25 == 0)
+                        {
+                            cache.Save();
+                            ScheduleRescan();
+                        }
+                    }).ConfigureAwait(false);
+                CaptureLog.Write($"[musicsync] analysed {done} song(s)");
+            }
+            catch (OperationCanceledException)
+            {
+                // Stopped.
+            }
+            catch (Exception ex)
+            {
+                CaptureLog.Write($"[musicsync] analysis failed: {ex.Message}");
+            }
+            finally
+            {
+                cache.Save();
+                Interlocked.Exchange(ref analyzing, 0);
+                if (!token.IsCancellationRequested)
+                {
+                    ScheduleRescan();
+                }
+            }
+        }, token);
     }
 
     private CachedTrack GetOrBuildCacheEntry(FileInfo info)
     {
         if (cache.TryGet(info.FullName, info.Length, info.LastWriteTimeUtc, out var cached))
         {
-            return cached;
+            if (cached.MetadataVersion >= MusicSyncConstants.MetadataVersion)
+            {
+                return cached;
+            }
+
+            // Tag reader learned something new (e.g. lyrics): re-read tags, keep hash and analysis.
+            var upgraded = cached with
+            {
+                Metadata = metadataReader.Read(info.FullName),
+                MetadataVersion = MusicSyncConstants.MetadataVersion,
+            };
+            cache.Set(info.FullName, upgraded);
+            return upgraded;
         }
 
         string sha;
@@ -262,7 +387,10 @@ public sealed class MusicLibraryService : IMusicLibraryService
             sha = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
         }
 
-        var entry = new CachedTrack(info.Length, info.LastWriteTimeUtc.Ticks, sha, metadataReader.Read(info.FullName));
+        var entry = new CachedTrack(info.Length, info.LastWriteTimeUtc.Ticks, sha, metadataReader.Read(info.FullName))
+        {
+            MetadataVersion = MusicSyncConstants.MetadataVersion,
+        };
         cache.Set(info.FullName, entry);
         return entry;
     }

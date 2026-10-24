@@ -9,4 +9,7 @@ public interface ITrackMetadataReader
 
     /// <summary>Embedded front cover, else a cover.jpg/folder.jpg next to the file, else null.</summary>
     AlbumArt? ReadArt(string path);
+
+    /// <summary>A sibling .lrc file (synced lyrics) if present, else lyrics embedded in the tags, else null.</summary>
+    string? ReadLyrics(string path);
 }

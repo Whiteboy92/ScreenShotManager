@@ -152,6 +152,8 @@ public sealed class MusicSyncServer : IMusicSyncServer
         // Cast: a (HttpContext) -> Task method group would bind as a raw RequestDelegate, which
         // skips endpoint filters (the token check!) and discards the IResult.
         api.MapPut("/backup", (Delegate)PutBackupAsync);
+        api.MapGet("/tracks/{id}/waveform", GetWaveform);
+        api.MapGet("/tracks/{id}/lyrics", GetLyrics);
         api.MapGet("/backup", GetBackup);
     }
 
@@ -263,6 +265,24 @@ public sealed class MusicSyncServer : IMusicSyncServer
 
         http.Response.Headers.CacheControl = "private, max-age=86400";
         return Results.Bytes(art.Data, art.ContentType);
+    }
+
+    /// <summary>One byte (0–255) per waveform point.</summary>
+    private IResult GetWaveform(string id) =>
+        library.TryGetTrack(id, out var track) && track.Waveform is { Length: > 0 } waveform
+            ? Results.Bytes(waveform, "application/octet-stream")
+            : Results.NotFound();
+
+    /// <summary>LRC (synced) or plain lyrics as UTF-8 text.</summary>
+    private IResult GetLyrics(string id)
+    {
+        if (!library.TryGetTrack(id, out var track) || track.LyricsVersion == null)
+        {
+            return Results.NotFound();
+        }
+
+        var lyrics = metadataReader.ReadLyrics(track.FullPath);
+        return lyrics == null ? Results.NotFound() : Results.Text(lyrics, "text/plain; charset=utf-8");
     }
 
     private static int ResolveBoundPort(WebApplication web, int requestedPort)

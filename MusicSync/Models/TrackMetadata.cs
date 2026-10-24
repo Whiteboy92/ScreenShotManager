@@ -7,7 +7,8 @@ public sealed record TrackMetadata(
     string? Album,
     uint? TrackNumber,
     long? DurationMs,
-    bool HasArt)
+    bool HasArt,
+    bool HasEmbeddedLyrics = false)
 {
     public static TrackMetadata None { get; } = new(null, null, null, null, null, false);
 }

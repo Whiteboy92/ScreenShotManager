@@ -25,4 +25,11 @@ public sealed record CachedTrack(
     long SizeBytes,
     long ModifiedUtcTicks,
     string Sha256,
-    TrackMetadata Metadata);
+    TrackMetadata Metadata)
+{
+    /// <summary>Filled in later by the background analyzer; null until then.</summary>
+    public TrackAnalysis? Analysis { get; init; }
+
+    /// <summary>Tag-reader version that produced <see cref="Metadata"/> (see MusicSyncConstants.MetadataVersion).</summary>
+    public int MetadataVersion { get; init; }
+}

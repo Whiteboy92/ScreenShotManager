@@ -180,4 +180,51 @@ public class MusicLibraryServiceTests
 
         Assert.False(service.IsReady);
     }
+
+    [Fact]
+    public async Task Analysis_runs_in_background_and_lands_in_manifest_with_album_gain()
+    {
+        using var temp = new TempFolder();
+        temp.Write("a.mp3", SongA);
+        temp.Write("b.mp3", SongB);
+        var reader = new FakeMetadataReader
+        {
+            Metadata = _ => new TrackMetadata("T", "Artist", "Album", 1, 60_000, false),
+        };
+        var analyzer = new FakeAnalyzer();
+        using var service = new MusicLibraryService(reader, new InMemoryTrackCache(), TimeSpan.FromMilliseconds(50), analyzer);
+        service.Start(temp.Path);
+        await service.RescanAsync();
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (service.Current.Tracks.Any(t => !t.HasWaveform) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.All(service.Current.Tracks, t =>
+        {
+            Assert.True(t.HasWaveform);
+            Assert.Equal(-6.0, t.GainDb);
+            Assert.Equal(-6.0, t.AlbumGainDb);
+            Assert.NotNull(t.Waveform);
+        });
+        Assert.Equal(2, analyzer.Calls);
+    }
+
+    [Fact]
+    public async Task Lrc_file_sets_lyrics_version_and_changes_revision()
+    {
+        using var temp = new TempFolder();
+        temp.Write("Song.mp3", SongA);
+        using var service = await StartAndScanAsync(new FakeMetadataReader(), temp.Path);
+        Assert.Null(service.Current.Tracks.Single().LyricsVersion);
+        var before = service.Current.Revision;
+
+        temp.Write("Song.lrc", Encoding.UTF8.GetBytes("[00:01.00]Hello"));
+        await service.RescanAsync();
+
+        Assert.StartsWith("lrc-", service.Current.Tracks.Single().LyricsVersion);
+        Assert.NotEqual(before, service.Current.Revision);
+    }
 }

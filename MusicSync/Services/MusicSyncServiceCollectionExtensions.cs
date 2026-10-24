@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using ScreenShotManager.MusicSync.Services.Interfaces;
+using ScreenShotManager.VideoDownscaler.Services;
+using ScreenShotManager.VideoDownscaler.Services.Interfaces;
 
 namespace ScreenShotManager.MusicSync.Services;
 
@@ -12,6 +14,8 @@ public static class MusicSyncServiceCollectionExtensions
     {
         services.AddSingleton<ITrackMetadataReader, TrackMetadataReader>();
         services.AddSingleton<ITrackCache, TrackCache>();
+        services.AddSingleton<IToolPathProvider, ToolPathProvider>();
+        services.AddSingleton<ITrackAnalyzer, TrackAnalyzer>();
         services.AddSingleton<IMusicLibraryService, MusicLibraryService>();
         services.AddSingleton<ICertificateProvider, CertificateProvider>();
         services.AddSingleton<IMusicSyncServer, MusicSyncServer>();

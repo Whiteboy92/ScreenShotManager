@@ -37,6 +37,23 @@ public sealed record TrackInfo
 
     public bool HasArt { get; init; }
 
+    /// <summary>dB to reach -18 LUFS (ReplayGain 2.0); null until the PC has analysed the song.</summary>
+    public double? GainDb { get; init; }
+
+    /// <summary>True peak in dBFS, so the phone never boosts a song into clipping.</summary>
+    public double? PeakDb { get; init; }
+
+    /// <summary>Gain shared by all songs of the same album (keeps intended loud/quiet contrast).</summary>
+    public double? AlbumGainDb { get; init; }
+
+    public bool HasWaveform { get; init; }
+
+    /// <summary>Changes whenever the lyrics change; null when the song has none.</summary>
+    public string? LyricsVersion { get; init; }
+
+    [JsonIgnore]
+    public byte[]? Waveform { get; init; }
+
     /// <summary>Absolute path on this PC. Never sent to the phone.</summary>
     [JsonIgnore]
     public string FullPath { get; init; } = string.Empty;

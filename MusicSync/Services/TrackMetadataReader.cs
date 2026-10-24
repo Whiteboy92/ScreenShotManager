@@ -32,7 +32,8 @@ public sealed class TrackMetadataReader : ITrackMetadataReader
                 NullIfBlank(tag.Album),
                 tag.Track == 0 ? null : tag.Track,
                 duration > TimeSpan.Zero ? (long)duration.TotalMilliseconds : null,
-                tag.Pictures.Length > 0 || FindFolderArt(path) != null);
+                tag.Pictures.Length > 0 || FindFolderArt(path) != null,
+                !string.IsNullOrWhiteSpace(tag.Lyrics));
         }
         catch
         {
@@ -75,6 +76,35 @@ public sealed class TrackMetadataReader : ITrackMetadataReader
             return null;
         }
     }
+
+    public string? ReadLyrics(string path)
+    {
+        var lrc = LrcPathFor(path);
+        if (File.Exists(lrc))
+        {
+            try
+            {
+                return File.ReadAllText(lrc);
+            }
+            catch
+            {
+                // Locked or unreadable; fall back to tags.
+            }
+        }
+
+        try
+        {
+            using var file = TagLib.File.Create(path);
+            return NullIfBlank(file.Tag.Lyrics);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>"Song.mp3" → "Song.lrc" in the same folder.</summary>
+    public static string LrcPathFor(string trackPath) => Path.ChangeExtension(trackPath, ".lrc");
 
     private static string? FindFolderArt(string trackPath)
     {

@@ -27,6 +27,27 @@ internal sealed class FakeMetadataReader : ITrackMetadataReader
     }
 
     public AlbumArt? ReadArt(string path) => Art;
+
+    public string? Lyrics { get; set; }
+
+    public string? ReadLyrics(string path) => Lyrics;
+}
+
+/** Returns a fixed analysis and counts calls; no ffmpeg needed. */
+internal sealed class FakeAnalyzer : ITrackAnalyzer
+{
+    private int calls;
+
+    public int Calls => calls;
+
+    public bool IsAvailable => true;
+
+    public System.Threading.Tasks.Task<TrackAnalysis?> AnalyzeAsync(string path, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref calls);
+        return System.Threading.Tasks.Task.FromResult<TrackAnalysis?>(
+            new TrackAnalysis(-12, -1, new byte[MusicSyncConstants.WaveformPoints]));
+    }
 }
 
 internal sealed class InMemoryTrackCache : ITrackCache

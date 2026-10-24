@@ -29,6 +29,12 @@ public static class MusicSyncConstants
     /// <summary>Largest accepted backup upload (playlists for tens of thousands of songs fit easily).</summary>
     public const int MaxBackupBytes = 2 * 1024 * 1024;
 
+    /// <summary>Peaks per song in the waveform the phone draws as its seek bar.</summary>
+    public const int WaveformPoints = 300;
+
+    /// <summary>Bump to make every cached song's tags be re-read (e.g. a new tag field), without re-hashing.</summary>
+    public const int MetadataVersion = 2;
+
     /// <summary>Quiet period after the last file-system change before the library is rescanned.</summary>
     public static readonly TimeSpan RescanDebounce = TimeSpan.FromSeconds(3);
 
