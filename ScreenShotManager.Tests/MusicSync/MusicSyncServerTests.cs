@@ -180,6 +180,26 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, traversal.StatusCode);
     }
 
+    /// <summary>With a valid token, nothing but the routes' own data comes back: no static files, no paths.</summary>
+    [Theory]
+    [InlineData("/api/tracks/..%5C..%5Cwin.ini/file")]
+    [InlineData("/api/tracks/..%2F..%2Fcert.pfx/art")]
+    [InlineData("/api/tracks/..%2F..%2Fcert.pfx/lyrics")]
+    [InlineData("/api/tracks/..%2F..%2Fcert.pfx/waveform")]
+    [InlineData("/api/tracks/C:%5CWindows%5Cwin.ini/file")]
+    [InlineData("/api/backup/..%2Fmusicwave-backup.previous.json")]
+    [InlineData("/musicwave-backup.json")]
+    [InlineData("/ScreenShotManager.dll")]
+    [InlineData("/Tools/ffmpeg.exe")]
+    [InlineData("/api/files?path=C:%5CWindows%5Cwin.ini")]
+    public async Task Paths_outside_the_routes_are_not_served(string path)
+    {
+        var response = await client.SendAsync(Get(path));
+        Assert.True(
+            response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed,
+            $"{path} returned {(int)response.StatusCode}");
+    }
+
     [Fact]
     public async Task Art_returns_image_or_404()
     {

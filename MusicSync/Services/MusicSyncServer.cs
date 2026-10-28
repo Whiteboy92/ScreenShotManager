@@ -30,7 +30,9 @@ namespace ScreenShotManager.MusicSync.Services;
 /// <item><c>GET /api/tracks/{id}/file</c> — audio bytes with Range support for resumable downloads.</item>
 /// <item><c>GET /api/tracks/{id}/art</c> — cover image, 404 when none.</item>
 /// </list>
-/// Tracks are only reachable by manifest id, never by a client-supplied path.
+/// Tracks are only reachable by manifest id, never by a client-supplied path, and links inside the
+/// music folder are never followed (<see cref="LibraryPaths"/>). The backup routes only touch the
+/// fixed backup file name in the backup folder.
 /// </summary>
 public sealed class MusicSyncServer : IMusicSyncServer
 {
@@ -320,7 +322,8 @@ public sealed class MusicSyncServer : IMusicSyncServer
     {
         var folder = backupFolder;
         var path = string.IsNullOrWhiteSpace(folder) ? null : Path.Combine(folder, MusicSyncConstants.BackupFileName);
-        return path != null && File.Exists(path)
+        // Plain file only: a link planted under the backup name must not hand out what it points to.
+        return path != null && LibraryPaths.IsPlainFile(path)
             ? Results.File(path, "application/json")
             : Results.NotFound();
     }

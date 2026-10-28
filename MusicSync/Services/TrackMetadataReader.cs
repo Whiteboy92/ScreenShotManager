@@ -80,7 +80,7 @@ public sealed class TrackMetadataReader : ITrackMetadataReader
     public string? ReadLyrics(string path)
     {
         var lrc = LrcPathFor(path);
-        if (File.Exists(lrc))
+        if (LibraryPaths.IsPlainFile(lrc))
         {
             try
             {
@@ -116,7 +116,7 @@ public sealed class TrackMetadataReader : ITrackMetadataReader
 
         return FolderArtNames
             .Select(name => Path.Combine(directory, name))
-            .FirstOrDefault(File.Exists);
+            .FirstOrDefault(LibraryPaths.IsPlainFile);
     }
 
     private static string? NullIfBlank(string? value) =>

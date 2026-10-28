@@ -227,4 +227,82 @@ public class MusicLibraryServiceTests
         Assert.StartsWith("lrc-", service.Current.Tracks.Single().LyricsVersion);
         Assert.NotEqual(before, service.Current.Revision);
     }
+
+    [Fact]
+    public async Task Scan_does_not_follow_a_junction_out_of_the_music_folder()
+    {
+        using var music = new TempFolder();
+        using var outside = new TempFolder();
+        music.Write("inside.mp3", SongA);
+        outside.Write("secret.mp3", SongB);
+        CreateJunction(System.IO.Path.Combine(music.Path, "Linked"), outside.Path);
+
+        using var service = await StartAndScanAsync(new FakeMetadataReader(), music.Path);
+
+        Assert.Equal(new[] { "inside.mp3" }, service.Current.Tracks.Select(t => t.RelativePath));
+    }
+
+    [Fact]
+    public async Task Scan_skips_a_file_symlink_pointing_out_of_the_music_folder()
+    {
+        using var music = new TempFolder();
+        using var outside = new TempFolder();
+        music.Write("inside.mp3", SongA);
+        var secret = outside.Write("passwords.txt", SongB);
+        try
+        {
+            File.CreateSymbolicLink(System.IO.Path.Combine(music.Path, "looks-like-a-song.mp3"), secret);
+        }
+        catch (IOException)
+        {
+            return; // Needs Developer Mode or admin; nothing to test without it.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        using var service = await StartAndScanAsync(new FakeMetadataReader(), music.Path);
+
+        Assert.Equal(new[] { "inside.mp3" }, service.Current.Tracks.Select(t => t.RelativePath));
+    }
+
+    [Fact]
+    public async Task Track_folder_swapped_for_a_junction_after_the_scan_is_not_served()
+    {
+        using var music = new TempFolder();
+        using var outside = new TempFolder();
+        music.Write(@"Album\song.mp3", SongA);
+        outside.Write("song.mp3", SongB);
+        using var service = await StartAndScanAsync(new FakeMetadataReader(), music.Path);
+        var id = service.Current.Tracks.Single().Id;
+
+        Directory.Delete(System.IO.Path.Combine(music.Path, "Album"), recursive: true);
+        CreateJunction(System.IO.Path.Combine(music.Path, "Album"), outside.Path);
+
+        Assert.False(service.TryGetTrack(id, out _));
+    }
+
+    [Theory]
+    [InlineData(@"..\outside\song.mp3")]
+    [InlineData(@"C:\Windows\win.ini")]
+    public void Paths_outside_the_music_folder_are_rejected(string relative)
+    {
+        using var music = new TempFolder();
+        Assert.False(LibraryPaths.IsPlainFileInside(music.Path, System.IO.Path.Combine(music.Path, relative)));
+    }
+
+    /// <summary>Junctions need no admin rights, unlike directory symlinks.</summary>
+    private static void CreateJunction(string link, string target)
+    {
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe")
+        {
+            ArgumentList = { "/c", "mklink", "/J", link, target },
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        process.WaitForExit();
+        Assert.True(Directory.Exists(link), "could not create junction");
+    }
 }

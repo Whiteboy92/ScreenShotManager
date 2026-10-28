@@ -113,8 +113,21 @@ public sealed class MusicLibraryService : IMusicLibraryService
         isReady = false;
     }
 
-    public bool TryGetTrack(string id, [NotNullWhen(true)] out TrackInfo? track) =>
-        tracksById.TryGetValue(id, out track);
+    /// <summary>
+    /// Looks a track up by manifest id. Also re-checks that its file is still a plain file inside
+    /// the music folder, in case it was swapped for a link since the scan.
+    /// </summary>
+    public bool TryGetTrack(string id, [NotNullWhen(true)] out TrackInfo? track)
+    {
+        var root = folder;
+        if (root != null && tracksById.TryGetValue(id, out track) && LibraryPaths.IsPlainFileInside(root, track.FullPath))
+        {
+            return true;
+        }
+
+        track = null;
+        return false;
+    }
 
     public async Task RescanAsync(CancellationToken cancellationToken = default)
     {
@@ -205,7 +218,8 @@ public sealed class MusicLibraryService : IMusicLibraryService
         {
             RecurseSubdirectories = true,
             IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System,
+            // ReparsePoint: never follow a junction/symlink out of the music folder (see LibraryPaths).
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
         };
 
         var tracks = new List<TrackInfo>();
