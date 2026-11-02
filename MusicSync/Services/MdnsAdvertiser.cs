@@ -22,6 +22,12 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
     /// <summary>Network changes come in bursts (DHCP, adapters coming up); announce once they settle.</summary>
     private static readonly TimeSpan ReannounceDelay = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How long phones may cache the announcement. A PC that loses power can't say goodbye, so
+    /// this is how long a phone can still think it's on (the mDNS default for service records is 75 min).
+    /// </summary>
+    internal static readonly TimeSpan PresenceTtl = TimeSpan.FromMinutes(2);
+
     private readonly object gate = new();
     private ServiceDiscovery? discovery;
     private ServiceProfile? profile;
@@ -119,6 +125,8 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
             profile.AddProperty("api", MusicSyncConstants.ApiVersion.ToString());
             profile.AddProperty("fp", fingerprint);
 
+            // The library stamps service records (PTR/SRV/TXT) with this on send; its default is 75 min.
+            MulticastService.NonHostTTL = PresenceTtl;
             discovery = new ServiceDiscovery();
             discovery.Advertise(profile);
             discovery.Announce(profile);
