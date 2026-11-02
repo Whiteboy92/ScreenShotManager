@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:components="clr-namespace:ScreenShotManager.Shared.Components"
-        Title="ScreenShotManager Settings" 
+        Title="ScreenShotManager Settings"
         Height="600" Width="700"
         MinHeight="600" MinWidth="700"
         WindowStartupLocation="CenterScreen"
@@ -13,10 +13,68 @@
         BorderBrush="{StaticResource BorderBrush}"
         BorderThickness="1"
         Icon="/Icon/camera_2925432.ico">
-    
+
+    <Window.Resources>
+        <!-- Tabs: underlined headers on the dark background, no default chrome -->
+        <Style x:Key="SettingsTabControlStyle" TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Margin="0,0,0,20">
+                                <TabPanel IsItemsHost="True"/>
+                            </Border>
+                            <ContentPresenter Grid.Row="1" ContentSource="SelectedContent"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsTabItemStyle" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0,0,0,2"
+                                Padding="16,8"
+                                Margin="0,0,6,-1">
+                            <ContentPresenter ContentSource="Header"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#4A9EFF"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="32" 
-                      ResizeBorderThickness="5" 
+        <WindowChrome CaptionHeight="32"
+                      ResizeBorderThickness="5"
                       GlassFrameThickness="0"
                       CornerRadius="0"/>
     </WindowChrome.WindowChrome>
@@ -25,233 +83,316 @@
             <RowDefinition Height="32"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        
+
         <!-- Custom Title Bar -->
         <components:CustomTitleBar Grid.Row="0" Title="⚙️ Settings"/>
-        
+
         <!-- Main Content -->
-        <Grid Grid.Row="1" Margin="25">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <TabControl Grid.Row="1"
+                    Margin="25,20,25,25"
+                    Style="{StaticResource SettingsTabControlStyle}">
 
-            <!-- Header -->
-            <TextBlock Grid.Row="0" 
-                       Text="Screenshot Settings" 
-                       Style="{StaticResource SectionHeaderStyle}"
-                       FontSize="20"
-                       Margin="0,10,0,20"/>
+            <!-- ScreenShotManager -->
+            <TabItem Header="📸 Screenshot Manager" Style="{StaticResource SettingsTabItemStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                              PanningMode="VerticalOnly"
+                              CanContentScroll="False"
+                              PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
+                    <StackPanel>
+                        <!-- Save folder -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="📁 Save Location"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Default save folder for screenshots:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="SaveFolderTextBox"
+                                             Grid.Column="0"
+                                             IsReadOnly="True"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             Margin="0,0,10,0"/>
+                                    <Button x:Name="BrowseFolderButton"
+                                            Grid.Column="1"
+                                            Content="Browse..."
+                                            Style="{StaticResource SecondaryButtonStyle}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
 
-            <!-- Settings content -->
-            <ScrollViewer Grid.Row="1" 
-                          VerticalScrollBarVisibility="Hidden"
-                          PanningMode="VerticalOnly"
-                          CanContentScroll="False"
-                          PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
-                <StackPanel>
-                    <!-- Save folder -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20"
-                            Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="📁 Save Location" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,10"/>
-                            <TextBlock Text="Default save folder for screenshots:" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="SaveFolderTextBox" 
-                                         Grid.Column="0"
-                                         IsReadOnly="True" 
-                                         Style="{StaticResource ModernTextBoxStyle}"
-                                         Margin="0,0,10,0"/>
-                                <Button x:Name="BrowseFolderButton" 
-                                        Grid.Column="1"
-                                        Content="Browse..." 
-                                        Style="{StaticResource SecondaryButtonStyle}"/>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
+                        <!-- File format -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="📸 File Format"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Image format for saved screenshots:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <components:CustomDropdown x:Name="FileFormatDropdown"
+                                                           SelectionChanged="FileFormatDropdown_SelectionChanged"/>
+                            </StackPanel>
+                        </Border>
 
-                    <!-- File format -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20"
-                            Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="📸 File Format" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,10"/>
-                            <TextBlock Text="Image format for saved screenshots:" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <components:CustomDropdown x:Name="FileFormatDropdown" 
-                                                       SelectionChanged="FileFormatDropdown_SelectionChanged"/>
-                        </StackPanel>
-                    </Border>
+                        <!-- Filename pattern -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="📝 Filename Pattern"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Template for automatic filenames:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <TextBox x:Name="FilenamePatternTextBox"
+                                         Style="{StaticResource ModernTextBoxStyle}"/>
+                                <TextBlock Text="Available tags: {date}, {time}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,8,0,0"/>
+                                <TextBlock x:Name="FilenamePreview"
+                                           FontSize="11"
+                                           Foreground="#4A9EFF"
+                                           Margin="0,3,0,0"
+                                           FontStyle="Italic"/>
+                            </StackPanel>
+                        </Border>
 
-                    <!-- Filename pattern -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20"
-                            Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="📝 Filename Pattern" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,10"/>
-                            <TextBlock Text="Template for automatic filenames:" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <TextBox x:Name="FilenamePatternTextBox" 
-                                     Style="{StaticResource ModernTextBoxStyle}"/>
-                            <TextBlock Text="Available tags: {date}, {time}" 
-                                       FontSize="11" 
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,8,0,0"/>
-                            <TextBlock x:Name="FilenamePreview" 
-                                       FontSize="11" 
-                                       Foreground="#4A9EFF"
-                                       Margin="0,3,0,0"
-                                       FontStyle="Italic"/>
-                        </StackPanel>
-                    </Border>
+                        <!-- Display & Startup options -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="🎨 Preferences"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,15"/>
 
-                    <!-- Display & Startup options -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20"
-                            Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="🎨 Preferences" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,15"/>
-                            
-                            <CheckBox x:Name="DisableDimmingCheckBox" 
-                                      Content="Disable screen dimming effect"
-                                      Style="{StaticResource ModernCheckBoxStyle}"
-                                      Margin="0,0,0,12"/>
-                            
-                            <CheckBox x:Name="StartOnLoginCheckBox" 
-                                      Content="Start ScreenShotManager on Windows login"
-                                      Style="{StaticResource ModernCheckBoxStyle}"/>
-                            <TextBlock Text="(Requires administrator privileges)" 
-                                       FontSize="11" 
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="32,5,0,0"/>
-                        </StackPanel>
-                    </Border>
+                                <CheckBox x:Name="DisableDimmingCheckBox"
+                                          Content="Disable screen dimming effect"
+                                          Style="{StaticResource ModernCheckBoxStyle}"
+                                          Margin="0,0,0,12"/>
 
-                    <!-- Auto-clean options -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20"
-                            Margin="0,0,0,15">
-                        <StackPanel>
-                            <TextBlock Text="🧹 Auto-Clean" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,10"/>
-                            <TextBlock Text="Maximum screenshots to keep (0 = unlimited):" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <Grid Margin="0,5,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Slider x:Name="MaxHistorySlider" 
-                                        Grid.Column="0"
-                                        Minimum="0" 
-                                        Maximum="1000" 
-                                        TickFrequency="50"
-                                        IsSnapToTickEnabled="True"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,15,0"/>
-                                <Border Grid.Column="1"
-                                        Background="{StaticResource AccentBrush}"
-                                        CornerRadius="4"
-                                        Padding="12,6"
-                                        MinWidth="60">
-                                    <TextBlock x:Name="MaxHistoryText" 
-                                               Text="100" 
-                                               Foreground="White"
-                                               FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Border>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
+                                <CheckBox x:Name="StartOnLoginCheckBox"
+                                          Content="Start ScreenShotManager on Windows login"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <TextBlock Text="(Requires administrator privileges)"
+                                           FontSize="11"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="32,5,0,0"/>
+                            </StackPanel>
+                        </Border>
 
-                    <!-- Music sync -->
-                    <Border Background="{StaticResource CardBackgroundBrush}" 
-                            BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="20">
-                        <StackPanel>
-                            <TextBlock Text="🎵 Music Sync" 
-                                       Style="{StaticResource SectionHeaderStyle}"
-                                       FontSize="15"
-                                       Margin="0,0,0,15"/>
+                        <!-- Auto-clean options -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20">
+                            <StackPanel>
+                                <TextBlock Text="🧹 Auto-Clean"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Maximum screenshots to keep (0 = unlimited):"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="MaxHistorySlider"
+                                            Grid.Column="0"
+                                            Minimum="0"
+                                            Maximum="1000"
+                                            TickFrequency="50"
+                                            IsSnapToTickEnabled="True"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,15,0"/>
+                                    <Border Grid.Column="1"
+                                            Background="{StaticResource AccentBrush}"
+                                            CornerRadius="4"
+                                            Padding="12,6"
+                                            MinWidth="60">
+                                        <TextBlock x:Name="MaxHistoryText"
+                                                   Text="100"
+                                                   Foreground="White"
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-                            <CheckBox x:Name="MusicSyncEnabledCheckBox" 
-                                      Content="Let my phone download songs over Wi-Fi"
-                                      Style="{StaticResource ModernCheckBoxStyle}"
-                                      Margin="0,0,0,15"/>
+            <!-- Music Wave (phone sync) -->
+            <TabItem Header="🎵 Music Wave" Style="{StaticResource SettingsTabItemStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                              PanningMode="VerticalOnly"
+                              CanContentScroll="False"
+                              PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
+                    <StackPanel>
+                        <!-- On/off -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="📶 Music Sync"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,15"/>
+                                <CheckBox x:Name="MusicSyncEnabledCheckBox"
+                                          Content="Let my phone download songs over Wi-Fi"
+                                          Style="{StaticResource ModernCheckBoxStyle}"/>
+                                <TextBlock Text="Pair your phone from the tray menu → Pair Phone…"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="32,5,0,0"/>
+                            </StackPanel>
+                        </Border>
 
-                            <TextBlock Text="Music folder to share:" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox x:Name="MusicFolderTextBox" 
-                                         Grid.Column="0"
-                                         IsReadOnly="True" 
-                                         Style="{StaticResource ModernTextBoxStyle}"
-                                         Margin="0,0,10,0"/>
-                                <Button x:Name="BrowseMusicFolderButton" 
-                                        Grid.Column="1"
-                                        Content="Browse..." 
-                                        Style="{StaticResource SecondaryButtonStyle}"/>
-                            </Grid>
+                        <!-- Music folder -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="🎧 Music Folder"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Songs in this folder are copied to the phone:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="MusicFolderTextBox"
+                                             Grid.Column="0"
+                                             IsReadOnly="True"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             Margin="0,0,10,0"/>
+                                    <Button x:Name="BrowseMusicFolderButton"
+                                            Grid.Column="1"
+                                            Content="Browse..."
+                                            Style="{StaticResource SecondaryButtonStyle}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
 
-                            <TextBlock Text="Port:" 
-                                       Style="{StaticResource LabelStyle}"/>
-                            <TextBox x:Name="MusicSyncPortTextBox" 
-                                     Width="120"
-                                     HorizontalAlignment="Left"
-                                     Style="{StaticResource ModernTextBoxStyle}"/>
-                            <TextBlock Text="Changes apply when this window closes. Pair your phone from the tray menu → Pair Phone…" 
-                                       FontSize="11" 
-                                       TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
+                        <!-- Backup folder -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20"
+                                Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="💾 Backup Folder"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Where the phone's settings and playlists backup is saved:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="MusicBackupFolderTextBox"
+                                             Grid.Column="0"
+                                             IsReadOnly="True"
+                                             Style="{StaticResource ModernTextBoxStyle}"
+                                             Margin="0,0,10,0"/>
+                                    <Button x:Name="BrowseMusicBackupFolderButton"
+                                            Grid.Column="1"
+                                            Content="Browse..."
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            Margin="0,0,10,0"/>
+                                    <Button x:Name="ResetMusicBackupFolderButton"
+                                            Grid.Column="2"
+                                            Content="Default"
+                                            ToolTip="Use a folder next to the music folder">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Opacity" Value="0.4"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </Grid>
+                                <TextBlock x:Name="MusicBackupFolderHint"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
 
-                </Grid>
-            </Grid>
-        </Window>
-
+                        <!-- Port -->
+                        <Border Background="{StaticResource CardBackgroundBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="20">
+                            <StackPanel>
+                                <TextBlock Text="🔌 Connection"
+                                           Style="{StaticResource SectionHeaderStyle}"
+                                           FontSize="15"
+                                           Margin="0,0,0,10"/>
+                                <TextBlock Text="Port:"
+                                           Style="{StaticResource LabelStyle}"/>
+                                <TextBox x:Name="MusicSyncPortTextBox"
+                                         Width="120"
+                                         HorizontalAlignment="Left"
+                                         Style="{StaticResource ModernTextBoxStyle}"/>
+                                <TextBlock Text="Changes apply when this window closes."
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

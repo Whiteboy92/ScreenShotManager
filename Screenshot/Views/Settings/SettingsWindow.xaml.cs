@@ -47,6 +47,8 @@ public partial class SettingsWindow
         MusicSyncEnabledCheckBox.Unchecked += (_, _) => SaveMusicSyncEnabled(false);
         BrowseMusicFolderButton.Click += OnBrowseMusicFolderClick;
         MusicSyncPortTextBox.TextChanged += OnMusicSyncPortChanged;
+        BrowseMusicBackupFolderButton.Click += OnBrowseMusicBackupFolderClick;
+        ResetMusicBackupFolderButton.Click += OnResetMusicBackupFolderClick;
     }
 
     private void ScrollViewer_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
@@ -82,7 +84,8 @@ public partial class SettingsWindow
             MusicSyncEnabledCheckBox.IsChecked = settings.MusicSyncEnabled;
             MusicFolderTextBox.Text = settings.MusicFolder;
             MusicSyncPortTextBox.Text = settings.MusicSyncPort.ToString();
-            
+
+            UpdateMusicBackupFolder();
             UpdateMaxHistoryText();
             UpdateFilenamePreview();
         }
@@ -214,11 +217,63 @@ public partial class SettingsWindow
 
                 settings.MusicFolder = dialog.SelectedPath;
                 settingsService.Save(settings);
+                // The default backup folder sits next to the music folder, so it moves too.
+                UpdateMusicBackupFolder();
             }
         }
         catch (Exception ex)
         {
             ShowError($"Error opening folder browser: {ex.Message}");
+        }
+    }
+
+    /// <summary>Shows the folder the backup actually lands in, and whether it's the default one.</summary>
+    private void UpdateMusicBackupFolder()
+    {
+        var isDefault = string.IsNullOrWhiteSpace(settings.MusicBackupFolder);
+        MusicBackupFolderTextBox.Text = settings.GetMusicBackupFolder();
+        ResetMusicBackupFolderButton.IsEnabled = !isDefault;
+        MusicBackupFolderHint.Text = isDefault
+            ? "Default: a folder next to the music folder."
+            : "Custom folder.";
+    }
+
+    private void OnBrowseMusicBackupFolderClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new FolderBrowserDialog
+            {
+                Description = "Select the folder for the phone's settings backup",
+                SelectedPath = settings.GetMusicBackupFolder(),
+                ShowNewFolderButton = true,
+            };
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK &&
+                !string.IsNullOrEmpty(dialog.SelectedPath))
+            {
+                settings.MusicBackupFolder = dialog.SelectedPath;
+                settingsService.Save(settings);
+                UpdateMusicBackupFolder();
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Error opening folder browser: {ex.Message}");
+        }
+    }
+
+    private void OnResetMusicBackupFolderClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            settings.MusicBackupFolder = string.Empty;
+            settingsService.Save(settings);
+            UpdateMusicBackupFolder();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Failed to save backup folder: {ex.Message}");
         }
     }
 
