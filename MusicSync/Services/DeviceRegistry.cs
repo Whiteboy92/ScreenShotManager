@@ -108,6 +108,14 @@ public sealed class DeviceRegistry : IDeviceRegistry
         return code;
     }
 
+    public void CancelPairingCode()
+    {
+        lock (sync)
+        {
+            pendingCode = null;
+        }
+    }
+
     public string? Redeem(string? code, string deviceName)
     {
         if (string.IsNullOrEmpty(code))

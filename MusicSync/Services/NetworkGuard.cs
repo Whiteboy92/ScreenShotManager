@@ -145,3 +145,55 @@ public sealed class AuthFailureLimiter
         public DateTimeOffset? LockedUntil { get; set; }
     }
 }
+
+/// <summary>Open connections per remote address, capped so one LAN peer can't take every Kestrel slot.</summary>
+public sealed class ConnectionCounter
+{
+    private readonly int maxPerAddress;
+    private readonly Dictionary<IPAddress, int> open = new();
+    private readonly object gate = new();
+
+    public ConnectionCounter(int maxPerAddress)
+    {
+        this.maxPerAddress = maxPerAddress;
+    }
+
+    /// <summary>Counts a new connection; false (and nothing counted) when the address is at its cap.</summary>
+    public bool TryEnter(IPAddress address)
+    {
+        address = Normalize(address);
+        lock (gate)
+        {
+            open.TryGetValue(address, out var count);
+            if (count >= maxPerAddress)
+            {
+                return false;
+            }
+
+            open[address] = count + 1;
+            return true;
+        }
+    }
+
+    public void Exit(IPAddress address)
+    {
+        address = Normalize(address);
+        lock (gate)
+        {
+            if (open.TryGetValue(address, out var count))
+            {
+                if (count <= 1)
+                {
+                    open.Remove(address);
+                }
+                else
+                {
+                    open[address] = count - 1;
+                }
+            }
+        }
+    }
+
+    private static IPAddress Normalize(IPAddress address) =>
+        address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+}

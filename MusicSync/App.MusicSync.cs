@@ -167,7 +167,7 @@ public partial class App
                 return;
             }
 
-            pairingWindow = new PairingWindow(NewPairingInfo, musicDevices!, () => musicLibrary?.Current);
+            pairingWindow = new PairingWindow(NewPairingInfo, musicDevices!, () => musicLibrary?.Current, () => musicServer?.BackupFolder);
             pairingWindow.Closed += (_, _) => pairingWindow = null;
             pairingWindow.Show();
         }

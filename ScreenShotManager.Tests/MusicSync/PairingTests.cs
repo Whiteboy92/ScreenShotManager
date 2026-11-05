@@ -67,6 +67,14 @@ public class PairingTests
         Assert.Equal("(no LAN address found)", (info with { Hosts = Array.Empty<string>() }).DisplayEndpoints);
     }
 
+    /// <summary>The phone shows the same "PC ID" for pairing links, so both must agree.</summary>
+    [Fact]
+    public void ShortFingerprint_is_the_first_eight_chars_grouped()
+    {
+        var info = new PairingInfo("pc", Array.Empty<string>(), 1, new PairingCode("c", DateTimeOffset.UnixEpoch), "ab12cd34ef");
+        Assert.Equal("AB12 CD34", info.ShortFingerprint);
+    }
+
     [Theory]
     [InlineData(new byte[] { 192, 168, 1, 5 }, true)]
     [InlineData(new byte[] { 10, 0, 0, 1 }, true)]

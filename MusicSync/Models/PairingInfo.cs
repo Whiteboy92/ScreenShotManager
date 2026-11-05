@@ -37,4 +37,12 @@ public sealed record PairingInfo(
     public string DisplayEndpoints => Hosts.Count == 0
         ? "(no LAN address found)"
         : string.Join(", ", Hosts.Select(h => $"{h}:{Port}"));
+
+    /// <summary>
+    /// First 8 fingerprint chars as "AB12 CD34". The phone shows the same for links that didn't come
+    /// from scanning this window, so the user can check it's really this PC.
+    /// </summary>
+    public string ShortFingerprint => CertificateFingerprint.Length < 8
+        ? CertificateFingerprint
+        : $"{CertificateFingerprint[..4]} {CertificateFingerprint[4..8]}".ToUpperInvariant();
 }

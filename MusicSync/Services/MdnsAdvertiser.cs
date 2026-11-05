@@ -29,6 +29,11 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
     internal static readonly TimeSpan PresenceTtl = TimeSpan.FromMinutes(2);
 
     private readonly object gate = new();
+    private MulticastService? multicast;
+
+    /// <summary>Adapters announced on (Private/Domain networks); tests allow all.</summary>
+    internal Func<NetworkInterface, bool> IsHomeAdapter { get; init; } = HomeNetworks.IsHomeAdapter;
+
     private ServiceDiscovery? discovery;
     private ServiceProfile? profile;
     private (int Port, string Fingerprint)? current;
@@ -114,20 +119,30 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
 
         try
         {
-            // Only real LAN addresses: by default every adapter is announced, including Hyper-V/WSL
-            // ones (e.g. 172.20.x.x) that the phone can't reach.
-            var addresses = LanAddressProvider.GetLanAddresses().Select(IPAddress.Parse).ToList();
+            // Only real LAN addresses on Private/Domain networks: by default every adapter is announced,
+            // including Hyper-V/WSL ones the phone can't reach and café Wi-Fi where strangers would
+            // learn the PC's name. None (e.g. only on public Wi-Fi) means no announcement at all.
+            var addresses = LanAddressProvider.GetLanAddresses(IsHomeAdapter).Select(IPAddress.Parse).ToList();
+            if (addresses.Count == 0)
+            {
+                CaptureLog.Write("[musicsync] no home network, not announcing");
+                return;
+            }
+
             profile = new ServiceProfile(
                 Environment.MachineName,
                 MusicSyncConstants.MdnsServiceType,
                 (ushort)port,
-                addresses.Count > 0 ? addresses : null);
+                addresses);
             profile.AddProperty("api", MusicSyncConstants.ApiVersion.ToString());
             profile.AddProperty("fp", fingerprint);
 
             // The library stamps service records (PTR/SRV/TXT) with this on send; its default is 75 min.
             MulticastService.NonHostTTL = PresenceTtl;
-            discovery = new ServiceDiscovery();
+            // Send (and answer queries) only on home adapters, not every NIC.
+            multicast = new MulticastService(nics => nics.Where(IsHomeAdapter));
+            discovery = new ServiceDiscovery(multicast);
+            multicast.Start();
             discovery.Advertise(profile);
             discovery.Announce(profile);
         }
@@ -154,7 +169,9 @@ public sealed class MdnsAdvertiser : IMdnsAdvertiser
         }
 
         try { discovery?.Dispose(); } catch { /* ignore */ }
+        try { multicast?.Dispose(); } catch { /* ignore */ }
         discovery = null;
+        multicast = null;
         profile = null;
     }
 }

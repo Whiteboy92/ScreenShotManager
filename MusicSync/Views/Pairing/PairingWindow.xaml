@@ -91,6 +91,7 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Name}"
@@ -101,7 +102,15 @@
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        FontSize="11"/>
                                         </StackPanel>
+                                        <!-- Hands another phone's (or the earlier shared) backup to this one, e.g. after a reinstall. -->
                                         <Button Grid.Column="1"
+                                                Content="Backup…"
+                                                Tag="{Binding Id}"
+                                                Click="OnBackupClick"
+                                                Padding="10,4"
+                                                Margin="0,0,6,0"
+                                                Style="{StaticResource SecondaryButtonStyle}"/>
+                                        <Button Grid.Column="2"
                                                 Content="Remove"
                                                 Tag="{Binding Id}"
                                                 Click="OnRemoveDeviceClick"

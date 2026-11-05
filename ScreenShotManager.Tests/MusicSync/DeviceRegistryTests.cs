@@ -59,6 +59,17 @@ public sealed class DeviceRegistryTests : IDisposable
     }
 
     [Fact]
+    public void Cancelled_code_can_no_longer_be_redeemed()
+    {
+        var registry = NewRegistry();
+        var code = registry.IssuePairingCode().Code;
+        registry.CancelPairingCode();
+
+        Assert.Null(registry.Redeem(code, "x"));
+        Assert.Empty(registry.Devices);
+    }
+
+    [Fact]
     public void Legacy_token_is_imported_once_and_only_its_hash_is_stored()
     {
         var registry = NewRegistry();

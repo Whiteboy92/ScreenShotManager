@@ -342,7 +342,56 @@ public sealed class MusicSyncServerTests : IAsyncLifetime
         var response = await client.SendAsync(Get("/api/backup"));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("""{"v":2}""", await response.Content.ReadAsStringAsync());
-        Assert.Equal("""{"v":1}""", File.ReadAllText(Path.Combine(folder, MusicSyncConstants.PreviousBackupFileName)));
+        var id = devices.Devices.Single().Id;
+        Assert.Equal("""{"v":1}""", File.ReadAllText(BackupFiles.PreviousPathFor(folder, id)));
+    }
+
+    [Fact]
+    public async Task Each_device_only_reads_and_overwrites_its_own_backup()
+    {
+        var folder = Path.Combine(temp.Path, "Music Settings");
+        server.BackupFolder = folder;
+        devices.ImportLegacyToken("other-token", "Other phone");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(PutBackup("""{"mine":1}"""))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(Get("/api/backup", "other-token"))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(PutBackup("""{"other":1}""", "other-token"))).StatusCode);
+        Assert.Equal("""{"mine":1}""", await (await client.SendAsync(Get("/api/backup"))).Content.ReadAsStringAsync());
+        Assert.Equal("""{"other":1}""", await (await client.SendAsync(Get("/api/backup", "other-token"))).Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Earlier_shared_backup_goes_only_to_a_sole_paired_device()
+    {
+        var folder = Path.Combine(temp.Path, "Music Settings");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(BackupFiles.LegacyPath(folder), """{"shared":1}""");
+        server.BackupFolder = folder;
+        devices.ImportLegacyToken("other-token", "Other phone");
+
+        // Two phones: nobody gets it automatically; the owner decides in the Pair window.
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(Get("/api/backup", "other-token"))).StatusCode);
+        Assert.True(File.Exists(BackupFiles.LegacyPath(folder)));
+
+        devices.Remove(devices.Devices.Single(d => d.Name == "Other phone").Id);
+        Assert.Equal("""{"shared":1}""", await (await client.SendAsync(Get("/api/backup"))).Content.ReadAsStringAsync());
+        Assert.False(File.Exists(BackupFiles.LegacyPath(folder)));
+    }
+
+    [Fact]
+    public async Task Connections_on_a_non_home_network_are_dropped_before_tls()
+    {
+        await using var publicOnly = new MusicSyncServer(library, reader, devices)
+        {
+            LoopbackOnly = true, Log = log.Enqueue, IsHomeAddress = _ => false,
+        };
+        await publicOnly.StartAsync(0, certificates.GetOrCreate());
+        using var http = NewPinnedClient(certificates.GetFingerprint());
+        http.BaseAddress = new Uri($"https://localhost:{publicOnly.BoundPort}");
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => http.SendAsync(Get("/api/ping", token: null)));
+        Assert.Contains(log, line => line.Contains("not a home network"));
     }
 
     [Fact]

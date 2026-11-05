@@ -6,10 +6,10 @@ using System.Net.Sockets;
 
 namespace ScreenShotManager.MusicSync.Services;
 
-/// <summary>Lists this PC's private IPv4 addresses on active Ethernet/Wi-Fi adapters, for the pairing QR code.</summary>
+/// <summary>Lists this PC's private IPv4 addresses on active Ethernet/Wi-Fi adapters of Private/Domain networks, for the pairing QR code and mDNS.</summary>
 public static class LanAddressProvider
 {
-    public static IReadOnlyList<string> GetLanAddresses()
+    public static IReadOnlyList<string> GetLanAddresses(Func<NetworkInterface, bool>? isHomeAdapter = null)
     {
         try
         {
@@ -20,6 +20,8 @@ public static class LanAddressProvider
                                   or NetworkInterfaceType.GigabitEthernet)
                 // Hyper-V / WSL / VPN adapters report as Ethernet; the phone can't reach those.
                 .Where(nic => !IsVirtual(nic))
+                // Café/hotel Wi-Fi (a Public network) is never offered or announced.
+                .Where(isHomeAdapter ?? HomeNetworks.IsHomeAdapter)
                 // Adapters with a default gateway first: that's the one the phone's Wi-Fi shares.
                 .OrderByDescending(nic => nic.GetIPProperties().GatewayAddresses.Count > 0)
                 .SelectMany(nic => nic.GetIPProperties().UnicastAddresses)

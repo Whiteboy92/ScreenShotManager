@@ -41,7 +41,8 @@ public class MdnsAdvertiserTests
         };
         listener.Start();
 
-        using var advertiser = new MdnsAdvertiser();
+        // Any adapter: the test machine may only be on networks Windows classes as Public.
+        using var advertiser = new MdnsAdvertiser { IsHomeAdapter = _ => true };
         advertiser.Start(TestPort, "AB" + new string('0', 62));
         listener.SendQuery(MusicSyncConstants.MdnsServiceType + ".local", type: DnsType.PTR);
 

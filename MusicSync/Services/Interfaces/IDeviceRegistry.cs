@@ -24,6 +24,9 @@ public interface IDeviceRegistry
     /// </summary>
     PairingCode IssuePairingCode();
 
+    /// <summary>Invalidates the current pairing code (the Pair window closed), so it can't be used later.</summary>
+    void CancelPairingCode();
+
     /// <summary>Spends the pairing code and registers a device; its new token, or null if the code is wrong, used or expired.</summary>
     string? Redeem(string? code, string deviceName);
 

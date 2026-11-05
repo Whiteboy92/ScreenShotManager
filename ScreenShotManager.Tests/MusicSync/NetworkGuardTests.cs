@@ -30,6 +30,25 @@ public class NetworkGuardTests
     public void Null_address_is_not_local() => Assert.False(NetworkGuard.IsLocalNetwork(null));
 
     [Fact]
+    public void Connection_counter_caps_each_address_separately()
+    {
+        var counter = new ConnectionCounter(2);
+        var phone = IPAddress.Parse("192.168.0.61");
+
+        Assert.True(counter.TryEnter(phone));
+        Assert.True(counter.TryEnter(IPAddress.Parse("::ffff:192.168.0.61")));
+        Assert.False(counter.TryEnter(phone));
+        Assert.True(counter.TryEnter(IPAddress.Parse("192.168.0.62")));
+
+        counter.Exit(phone);
+        Assert.True(counter.TryEnter(phone));
+    }
+
+    [Fact]
+    public void Loopback_is_always_a_home_address() =>
+        Assert.True(HomeNetworks.IsHomeAddress(IPAddress.Loopback));
+
+    [Fact]
     public void Limiter_locks_after_max_failures_within_window()
     {
         var clock = new ManualClock();

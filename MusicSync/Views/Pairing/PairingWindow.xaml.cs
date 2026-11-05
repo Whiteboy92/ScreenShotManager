@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using QRCoder;
 using ScreenShotManager.MusicSync.Models;
+using ScreenShotManager.MusicSync.Services;
 using ScreenShotManager.MusicSync.Services.Interfaces;
 using MessageBox = System.Windows.MessageBox;
 
@@ -25,18 +26,20 @@ public partial class PairingWindow
     private readonly Func<PairingInfo> newPairing;
     private readonly IDeviceRegistry devices;
     private readonly Func<LibraryManifest?> currentManifest;
+    private readonly Func<string?> backupFolder;
     private readonly DispatcherTimer tick;
     private PairingInfo current;
     private string? copiedText;
     private DateTime copiedAtUtc;
 
-    public PairingWindow(Func<PairingInfo> newPairing, IDeviceRegistry devices, Func<LibraryManifest?> currentManifest)
+    public PairingWindow(Func<PairingInfo> newPairing, IDeviceRegistry devices, Func<LibraryManifest?> currentManifest, Func<string?> backupFolder)
     {
         InitializeComponent();
 
         this.newPairing = newPairing ?? throw new ArgumentNullException(nameof(newPairing));
         this.devices = devices ?? throw new ArgumentNullException(nameof(devices));
         this.currentManifest = currentManifest ?? throw new ArgumentNullException(nameof(currentManifest));
+        this.backupFolder = backupFolder ?? throw new ArgumentNullException(nameof(backupFolder));
 
         current = newPairing();
         ShowPairing(current);
@@ -54,6 +57,8 @@ public partial class PairingWindow
         {
             tick.Stop();
             devices.Changed -= onDevicesChanged;
+            // Someone who saw the QR or the copied link must not be able to pair once the window is gone.
+            devices.CancelPairingCode();
             ClearCopiedCode();
         };
 
@@ -64,7 +69,7 @@ public partial class PairingWindow
     private void ShowPairing(PairingInfo pairing)
     {
         current = pairing;
-        EndpointText.Text = pairing.DisplayEndpoints;
+        EndpointText.Text = $"{pairing.DisplayEndpoints}  ·  PC ID {pairing.ShortFingerprint}";
         QrImage.Source = RenderQr(pairing.ToUri());
         CopyCodeButton.Content = "Copy code";
         UpdateExpiry();
@@ -155,6 +160,65 @@ public partial class PairingWindow
         if (confirm == MessageBoxResult.Yes)
         {
             devices.Remove(id);
+        }
+    }
+
+    /// <summary>
+    /// Each phone only reads its own backup. A reinstalled phone pairs as a new device, so the owner
+    /// picks here which stored backup it gets; the phone then uses Restore in its settings.
+    /// </summary>
+    private void OnBackupClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string id } button)
+        {
+            return;
+        }
+
+        var folder = backupFolder();
+        var names = devices.Devices.ToDictionary(d => d.Id, d => d.Name);
+        var menu = new System.Windows.Controls.ContextMenu { PlacementTarget = button };
+        foreach (var source in BackupFiles.Sources(folder, id))
+        {
+            var from = source.DeviceId == null
+                ? "earlier shared backup"
+                : names.TryGetValue(source.DeviceId, out var name) ? name : "a removed phone";
+            var item = new System.Windows.Controls.MenuItem
+            {
+                Header = $"Use backup from {from} ({source.SavedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)})",
+            };
+            item.Click += (_, _) => GiveBackup(folder!, source, id, from);
+            menu.Items.Add(item);
+        }
+
+        if (menu.Items.Count == 0)
+        {
+            menu.Items.Add(new System.Windows.Controls.MenuItem { Header = "No other backups on this PC", IsEnabled = false });
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private void GiveBackup(string folder, BackupFiles.Source source, string deviceId, string from)
+    {
+        var name = devices.Devices.FirstOrDefault(d => d.Id == deviceId)?.Name ?? "this phone";
+        var confirm = MessageBox.Show(
+            $"{name} gets the backup from {from} (its own current backup is kept as the previous copy). " +
+            "Then tap Restore in the phone's settings. Continue?",
+            "Use backup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            BackupFiles.CopyTo(folder, source, deviceId);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not copy the backup: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

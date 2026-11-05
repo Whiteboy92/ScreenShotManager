@@ -48,6 +48,8 @@ public sealed class MusicSyncServer : IMusicSyncServer
     private volatile CachedManifest? cachedManifest;
     private volatile string? backupFolder;
     private AuthFailureLimiter authFailures = new();
+    private readonly object backupGate = new();
+    private readonly ConnectionCounter connections = new(MusicSyncConstants.MaxConnectionsPerAddress);
 
     public MusicSyncServer(IMusicLibraryService library, ITrackMetadataReader metadataReader, IDeviceRegistry devices)
     {
@@ -72,6 +74,9 @@ public sealed class MusicSyncServer : IMusicSyncServer
     /// <summary>Security events (rejected connections, lockouts). Tests capture them.</summary>
     internal Action<string> Log { get; init; } = CaptureLog.Write;
 
+    /// <summary>Whether a local address is on a Private/Domain network (or loopback); tests replace it.</summary>
+    internal Func<IPAddress, bool> IsHomeAddress { get; init; } = HomeNetworks.IsHomeAddress;
+
     /// <summary>Clock for the auth lockout; tests advance it.</summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
@@ -95,6 +100,9 @@ public sealed class MusicSyncServer : IMusicSyncServer
         {
             kestrel.AddServerHeader = false;
             kestrel.Limits.MaxConcurrentConnections = MusicSyncConstants.MaxConnections;
+            // Defaults (130 s / 30 s) let an idle unauthenticated peer sit on connection slots.
+            kestrel.Limits.KeepAliveTimeout = MusicSyncConstants.KeepAliveTimeout;
+            kestrel.Limits.RequestHeadersTimeout = MusicSyncConstants.RequestHeadersTimeout;
             // Only PUT /api/backup has a body.
             kestrel.Limits.MaxRequestBodySize = MusicSyncConstants.MaxBackupBytes;
             if (LoopbackOnly)
@@ -172,8 +180,9 @@ public sealed class MusicSyncServer : IMusicSyncServer
 
     /// <summary>
     /// Connection middleware runs before the TLS handshake, so off-network devices learn nothing
-    /// (not even the certificate). Covers the PC being on a café/hotel network or reachable over
-    /// public IPv6: only loopback and private addresses on both ends get through.
+    /// (not even the certificate). Only loopback/private addresses on both ends get through, and only
+    /// on a network Windows classes as Private or Domain: café/hotel Wi-Fi also hands out private
+    /// addresses, but is a Public network. One address can't hold more than a few connection slots.
     /// </summary>
     private void ConfigureListener(Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions listen, X509Certificate2 certificate)
     {
@@ -181,14 +190,28 @@ public sealed class MusicSyncServer : IMusicSyncServer
         {
             var remote = (connection.RemoteEndPoint as IPEndPoint)?.Address;
             var local = (connection.LocalEndPoint as IPEndPoint)?.Address;
-            if (!NetworkGuard.IsLocalNetwork(remote) || !NetworkGuard.IsLocalNetwork(local))
+            if (!NetworkGuard.IsLocalNetwork(remote) || !NetworkGuard.IsLocalNetwork(local) || !IsHomeAddress(local!))
             {
-                Log($"[musicsync] rejected connection from {connection.RemoteEndPoint} to {connection.LocalEndPoint} (not a local network)");
+                Log($"[musicsync] rejected connection from {connection.RemoteEndPoint} to {connection.LocalEndPoint} (not a home network)");
                 connection.Abort();
                 return;
             }
 
-            await next(connection).ConfigureAwait(false);
+            if (!connections.TryEnter(remote!))
+            {
+                Log($"[musicsync] rejected connection from {connection.RemoteEndPoint} (more than {MusicSyncConstants.MaxConnectionsPerAddress} open)");
+                connection.Abort();
+                return;
+            }
+
+            try
+            {
+                await next(connection).ConfigureAwait(false);
+            }
+            finally
+            {
+                connections.Exit(remote!);
+            }
         });
         listen.UseHttps(certificate);
     }
@@ -208,8 +231,9 @@ public sealed class MusicSyncServer : IMusicSyncServer
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
 
-        if (devices.Authenticate(PairingTokens.ExtractBearer(http.Request.Headers.Authorization.ToString())) != null)
+        if (devices.Authenticate(PairingTokens.ExtractBearer(http.Request.Headers.Authorization.ToString())) is { } device)
         {
+            http.Items[DeviceItem] = device;
             authFailures.RecordSuccess(remote);
             return null;
         }
@@ -266,6 +290,11 @@ public sealed class MusicSyncServer : IMusicSyncServer
         return Results.Json(new { token, apiVersion = MusicSyncConstants.ApiVersion }, JsonOptions);
     }
 
+    /// <summary>The <see cref="PairedDevice"/> whose token authorized the request (set by <see cref="Authorize"/>).</summary>
+    private const string DeviceItem = "musicsync.device";
+
+    private static PairedDevice DeviceOf(HttpContext http) => (PairedDevice)http.Items[DeviceItem]!;
+
     private sealed record PairRequest(string? Code, string? DeviceName);
 
     /// <summary>The manifest serialized once per library revision (it only changes on rescans).</summary>
@@ -304,26 +333,42 @@ public sealed class MusicSyncServer : IMusicSyncServer
             return Results.BadRequest(new { error = "Backup must be valid JSON" });
         }
 
-        Directory.CreateDirectory(folder);
-        var target = Path.Combine(folder, MusicSyncConstants.BackupFileName);
-        var temp = target + ".tmp";
-        await File.WriteAllBytesAsync(temp, body, http.RequestAborted).ConfigureAwait(false);
-
-        if (File.Exists(target))
+        var device = DeviceOf(http);
+        lock (backupGate)
         {
-            File.Copy(target, Path.Combine(folder, MusicSyncConstants.PreviousBackupFileName), overwrite: true);
+            BackupFiles.Write(folder, device.Id, body);
         }
 
-        File.Move(temp, target, overwrite: true);
         return Results.NoContent();
     }
 
-    private IResult GetBackup()
+    /// <summary>
+    /// This phone's own backup only. The shared file from before per-device backups goes to the
+    /// phone automatically only when it is the sole paired device; otherwise the PC owner hands it
+    /// out in the Pair window.
+    /// </summary>
+    private IResult GetBackup(HttpContext http)
     {
         var folder = backupFolder;
-        var path = string.IsNullOrWhiteSpace(folder) ? null : Path.Combine(folder, MusicSyncConstants.BackupFileName);
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return Results.NotFound();
+        }
+
+        var device = DeviceOf(http);
+        var path = BackupFiles.PathFor(folder, device.Id);
+        lock (backupGate)
+        {
+            var legacy = BackupFiles.LegacyPath(folder);
+            if (!LibraryPaths.IsPlainFile(path) && LibraryPaths.IsPlainFile(legacy) && devices.Devices.Count == 1)
+            {
+                File.Move(legacy, path);
+                Log($"[musicsync] gave the earlier shared backup to \"{device.Name}\" (only paired phone)");
+            }
+        }
+
         // Plain file only: a link planted under the backup name must not hand out what it points to.
-        return path != null && LibraryPaths.IsPlainFile(path)
+        return LibraryPaths.IsPlainFile(path)
             ? Results.File(path, "application/json")
             : Results.NotFound();
     }

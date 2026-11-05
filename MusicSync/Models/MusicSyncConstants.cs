@@ -29,11 +29,11 @@ public static class MusicSyncConstants
     /// <summary>Bytes of randomness in a generated pairing token (hex-encoded, so 64 chars).</summary>
     public const int TokenBytes = 32;
 
-    /// <summary>File the phone app's settings/playlists backup is written to (in the backup folder).</summary>
+    /// <summary>
+    /// The settings backup every phone shared before backups were per device. Now each phone has
+    /// <c>musicwave-backup.&lt;device id&gt;.json</c> (see BackupFiles); this one is only handed out.
+    /// </summary>
     public const string BackupFileName = "musicwave-backup.json";
-
-    /// <summary>The previous backup is kept here, so one bad upload can't wipe the only copy.</summary>
-    public const string PreviousBackupFileName = "musicwave-backup.previous.json";
 
     /// <summary>Largest accepted backup upload (playlists for tens of thousands of songs fit easily).</summary>
     public const int MaxBackupBytes = 2 * 1024 * 1024;
@@ -46,6 +46,15 @@ public static class MusicSyncConstants
 
     /// <summary>Simultaneous connections Kestrel accepts (the phone uses a handful; Android Auto adds art requests).</summary>
     public const int MaxConnections = 32;
+
+    /// <summary>Connections one address may hold at once, so a single LAN peer can't take every slot.</summary>
+    public const int MaxConnectionsPerAddress = 8;
+
+    /// <summary>Idle time before Kestrel closes a kept-alive connection (the phone reconnects cheaply).</summary>
+    public static readonly TimeSpan KeepAliveTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Time a client gets to send its request headers.</summary>
+    public static readonly TimeSpan RequestHeadersTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>Wrong tokens from one address within <see cref="AuthFailureWindow"/> before it is locked out.</summary>
     public const int MaxAuthFailures = 5;
