@@ -167,6 +167,16 @@ public partial class App
                 return;
             }
 
+            // Only Private/Domain networks are served (see HomeNetworks); a QR without an address can't pair.
+            if (LanAddressProvider.GetLanAddresses().Count == 0)
+            {
+                Notify(
+                    "No home network",
+                    "Windows marks this PC's network as Public, so the phone can't reach it. Set it to Private: Settings → Network & internet → your connection → Private network.",
+                    NotificationSeverity.Warning);
+                return;
+            }
+
             pairingWindow = new PairingWindow(NewPairingInfo, musicDevices!, () => musicLibrary?.Current, () => musicServer?.BackupFolder);
             pairingWindow.Closed += (_, _) => pairingWindow = null;
             pairingWindow.Show();
