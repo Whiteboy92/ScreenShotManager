@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using ScreenShotManager.Shared.Helpers;
 
 namespace ScreenShotManager.MusicSync.Services;
@@ -78,7 +79,8 @@ internal static class HomeNetworks
             {
                 if ((int)connection.GetNetwork().GetCategory() != PublicCategory)
                 {
-                    ids.Add(((Guid)connection.GetAdapterId()).ToString("B"));
+                    // A GUID can't come back through IDispatch ("Value does not fall within the expected range").
+                    ids.Add(((INetworkConnection)(object)connection).GetAdapterId().ToString("B"));
                 }
             }
         }
@@ -89,5 +91,27 @@ internal static class HomeNetworks
         }
 
         return ids;
+    }
+
+    /// <summary>netlistmgr.h INetworkConnection, vtable order up to GetAdapterId (the only call made).</summary>
+    [ComImport]
+    [Guid("DCB00005-570F-4A9B-8D69-199FDBA5723B")]
+    [InterfaceType(ComInterfaceType.InterfaceIsDual)]
+    private interface INetworkConnection
+    {
+        [return: MarshalAs(UnmanagedType.Interface)]
+        object GetNetwork();
+
+        [return: MarshalAs(UnmanagedType.VariantBool)]
+        bool GetIsConnectedToInternet();
+
+        [return: MarshalAs(UnmanagedType.VariantBool)]
+        bool GetIsConnected();
+
+        int GetConnectivity();
+
+        Guid GetConnectionId();
+
+        Guid GetAdapterId();
     }
 }
